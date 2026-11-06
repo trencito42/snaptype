@@ -79,3 +79,4 @@ npm run build:extension -- --api-url=https://api.snaptype.com/api/v1 --app-url=h
 npm run package:extensions
 ```
 The output zip files in `dist/` will be pre-configured with the production API and Web domains.
+

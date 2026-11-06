@@ -64,3 +64,4 @@ All security fixes are validated by automated test suites:
 * `tests/integration/api.test.ts`: Verifies OTP HMAC validation, rate-limit cooldown, and revision bumping.
 * `tests/integration/tables.test.ts`: Verifies workspace boundary checks and data table lookups.
 * `tests/unit/csv-parser.test.ts`: Verifies RFC-4180 parsing with multiline and quote escaping.
+

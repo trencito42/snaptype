@@ -51,3 +51,4 @@ describe('RFC-4180 Compliant CSV Parser & Serializer', () => {
     expect(parsed[1][2]).toBe('First\r\nSecond\nThird');
   });
 });
+

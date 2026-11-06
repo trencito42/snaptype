@@ -223,3 +223,4 @@ export async function tableRoutes(app: FastifyInstance, repo: IRepository, authS
     return { success: true };
   });
 }
+

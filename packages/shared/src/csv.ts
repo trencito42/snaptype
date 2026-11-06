@@ -94,3 +94,4 @@ export function serializeCSV(rows: (string | number | boolean | null | undefined
     }).join(',');
   }).join('\r\n');
 }
+

@@ -48,3 +48,4 @@ Built via esbuild with treeshaking and minification:
 * **Idle CPU:** 0.0%. No `setInterval` loops or background polling in content scripts. Execution occurs strictly on `keydown` and message dispatch.
 * **Typing Overhead:** Less than 0.05 ms per keystroke input event handler execution time.
 * **Memory Footprint:** Reverse-trie structure for 5,000 snippets consumes less than 1.8 MB in JavaScript heap memory.
+

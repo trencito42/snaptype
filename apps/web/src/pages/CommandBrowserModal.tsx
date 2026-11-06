@@ -284,3 +284,4 @@ export const CommandBrowserModal: React.FC<CommandBrowserModalProps> = ({
     </div>
   );
 };
+

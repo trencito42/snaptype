@@ -420,3 +420,4 @@ export const DataTablesModal: React.FC<DataTablesModalProps> = ({
     </div>
   );
 };
+

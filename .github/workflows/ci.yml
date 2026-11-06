@@ -46,3 +46,4 @@ jobs:
             dist/chrome-extension.zip
             dist/firefox-extension.zip
           retention-days: 14
+
