@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "SnapType — Text Expansion Platform",
+  "version": "1.0.0",
+  "description": "Sub-millisecond local text expansion for high-performance customer support and productivity.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "extension@snaptype.app",
+      "strict_min_version": "109.0"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "https://api.snaptype.app/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SnapType"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

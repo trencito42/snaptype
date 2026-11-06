@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapType</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app" class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">SnapType</span>
+      </div>
+      <div id="header-status" class="sync-indicator"></div>
+    </header>
+
+    <!-- State A: Unauthenticated Flow -->
+    <div id="auth-view" class="view" style="display: none;">
+      <div id="email-step">
+        <h2 class="auth-title">Welcome</h2>
+        <p class="auth-subtitle">Your snippets, everywhere.</p>
+        <form id="email-form">
+          <input type="email" id="auth-email" class="popup-input" placeholder="name@company.com" required />
+          <button type="submit" id="btn-request-otp" class="popup-btn popup-btn-primary">Continue</button>
+        </form>
+      </div>
+
+      <div id="otp-step" style="display: none;">
+        <h2 class="auth-title">Enter Code</h2>
+        <p class="auth-subtitle">We sent a 6-digit code to your email.</p>
+        <form id="otp-form">
+          <input type="text" id="auth-otp" class="popup-input popup-input-mono" placeholder="123456" maxlength="6" required />
+          <button type="submit" id="btn-verify-otp" class="popup-btn popup-btn-primary">Sign in</button>
+          <button type="button" id="btn-back-email" class="popup-btn popup-btn-ghost">Change email</button>
+        </form>
+      </div>
+      <div id="auth-error" class="error-msg"></div>
+    </div>
+
+    <!-- State B: Authenticated View -->
+    <div id="main-view" class="view" style="display: none;">
+      <!-- Search -->
+      <div class="search-box">
+        <input type="text" id="snippet-search" class="popup-input" placeholder="Search snippets... (Ctrl+K)" />
+      </div>
+
+      <!-- Snippet List -->
+      <div id="snippet-list" class="snippet-list">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Footer Actions -->
+      <footer class="popup-footer">
+        <button id="btn-sync-now" class="footer-btn" title="Sync with server">🔄 Sync</button>
+        <button id="btn-open-dash" class="footer-btn">📊 Dashboard</button>
+        <button id="btn-logout" class="footer-btn footer-btn-danger">Sign out</button>
+      </footer>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

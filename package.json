@@ -1,0 +1,33 @@
+{
+  "name": "snaptype-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:packages": "npm run build -w packages/shared -w packages/snippet-engine -w packages/browser-compat",
+    "build:api": "npm run build -w apps/api",
+    "build:web": "npm run build -w apps/web",
+    "build:extension": "npm run build -w apps/extension",
+    "build:extension:chrome": "npm run build:chrome -w apps/extension",
+    "build:extension:firefox": "npm run build:firefox -w apps/extension",
+    "package:extensions": "npm run package -w apps/extension",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "tsc --build --noEmit",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "dev": "npm run dev -w apps/api & npm run dev -w apps/web"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5",
+    "tsx": "^4.19.3",
+    "archiver": "^7.0.1",
+    "@types/node": "^22.13.4"
+  }
+}

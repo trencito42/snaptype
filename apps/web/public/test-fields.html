@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SnapType — Extension Integration Test Field Page</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #fcfcfa;
+      color: #101110;
+      max-width: 760px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+    }
+    h1 { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+    p { color: #686b66; font-size: 14px; margin-bottom: 24px; }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e5e8e2;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    label { display: block; font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+    .hint { font-size: 12px; color: #686b66; margin-bottom: 10px; }
+    input, textarea, .editable-box {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border: 1px solid #e5e8e2;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus, .editable-box:focus { border-color: #101110; }
+    .editable-box { min-height: 80px; background: #ffffff; }
+    .badge {
+      background: #eefde9;
+      color: #166534;
+      border: 1px solid #c0f4b3;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>SnapType Browser Compatibility Test Suite</h1>
+  <p>Test the loaded Chrome or Firefox extension against all standard editable DOM types.</p>
+
+  <div class="card">
+    <label>1. Standard Input (&lt;input type="text"&gt;)</label>
+    <div class="hint">Type shortcut <span class="badge">cerbonus</span> or <span class="badge">msver</span> below:</div>
+    <input type="text" id="test-input" placeholder="Type shortcut here..." />
+  </div>
+
+  <div class="card">
+    <label>2. Multi-line Textarea (&lt;textarea&gt;)</label>
+    <div class="hint">Type shortcut <span class="badge">cerbonus</span> or <span class="badge">/salut</span>:</div>
+    <textarea id="test-textarea" rows="4" placeholder="Type shortcut here..."></textarea>
+  </div>
+
+  <div class="card">
+    <label>3. ContentEditable Element (&lt;div contenteditable="true"&gt;)</label>
+    <div class="hint">Click inside and type <span class="badge">cerbonus</span> or press <span class="badge">Ctrl+Shift+Space</span>:</div>
+    <div id="test-contenteditable" class="editable-box" contenteditable="true">Click here and type cerbonus</div>
+  </div>
+
+  <div class="card">
+    <label>4. Password Security Boundary (&lt;input type="password"&gt;)</label>
+    <div class="hint">Type <span class="badge">cerbonus</span> — SnapType MUST NOT expand inside sensitive fields!</div>
+    <input type="password" id="test-password" placeholder="Password field - expansion blocked" />
+  </div>
+</body>
+</html>
