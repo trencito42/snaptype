@@ -141,3 +141,4 @@ CREATE TABLE IF NOT EXISTS `workspace_revisions` (
   PRIMARY KEY (`workspace_id`),
   CONSTRAINT `fk_workspace_revisions_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

@@ -76,3 +76,4 @@ export async function authRoutes(app: FastifyInstance, authService: AuthService)
     };
   });
 }
+

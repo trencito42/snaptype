@@ -105,3 +105,4 @@ describe('ReverseShortcutMatcher', () => {
     expect(match).toBeNull();
   });
 });
+

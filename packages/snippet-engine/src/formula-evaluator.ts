@@ -227,3 +227,4 @@ export class SafeFormulaEvaluator {
     return 0;
   }
 }
+

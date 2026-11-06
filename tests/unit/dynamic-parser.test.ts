@@ -91,3 +91,4 @@ Notes: {{paragraph:details|label="Detalii"}}`;
     expect(loopRes.text).toContain('[Circular or excessive nested snippet]');
   });
 });
+

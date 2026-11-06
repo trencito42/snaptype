@@ -92,3 +92,4 @@ export async function folderRoutes(app: FastifyInstance, repo: IRepository, auth
     return { success: true, message: 'Folder deleted, associated snippets preserved' };
   });
 }
+

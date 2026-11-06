@@ -354,3 +354,4 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth, onNavigate
     </div>
   );
 };
+

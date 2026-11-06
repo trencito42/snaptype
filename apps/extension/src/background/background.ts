@@ -207,3 +207,4 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
 });
 
 init();
+

@@ -85,3 +85,4 @@ export type CreateSnippetInput = z.infer<typeof CreateSnippetSchema>;
 export type UpdateSnippetInput = z.infer<typeof UpdateSnippetSchema>;
 export type UpdatePreferencesInput = z.infer<typeof UpdatePreferencesSchema>;
 export type ImportSnippetsInput = z.infer<typeof ImportSnippetsSchema>;
+

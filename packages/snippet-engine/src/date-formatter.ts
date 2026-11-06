@@ -112,3 +112,4 @@ export function applyDateFormat(date: Date, format: string, timezone?: string, l
     .replace(/\bA\b/g, ampm)
     .replace(/\ba\b/g, ampm.toLowerCase());
 }
+

@@ -64,3 +64,4 @@ export async function initDatabase(databaseUrl?: string, forceDriver?: string): 
     return repo;
   }
 }
+

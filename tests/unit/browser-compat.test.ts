@@ -12,3 +12,4 @@ describe('Browser Compatibility & Security Exclusions', () => {
     expect(DomDetector.isExcludedDomain('localhost', excluded)).toBe(false);
   });
 });
+

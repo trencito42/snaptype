@@ -121,3 +121,4 @@ When a new account is registered, these default snippets are automatically ready
 - `retragere` — Withdrawal processing timeline notice
 
 Press **Ctrl + Shift + Space** on any webpage to open the keyboard search assistant!
+

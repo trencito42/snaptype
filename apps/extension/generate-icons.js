@@ -13,3 +13,4 @@ fs.writeFileSync(path.join(iconDir, 'icon48.png'), buffer);
 fs.writeFileSync(path.join(iconDir, 'icon128.png'), buffer);
 
 console.log('Extension icons created.');
+

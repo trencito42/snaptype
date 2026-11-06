@@ -86,3 +86,4 @@ A dedicated verification page is located at `http://localhost:5173` (Nav tab: **
    - Focus on password input field (`type="password"`).
    - Type `cerbonus`.
    - Result: **NO expansion occurs**, verifying strict security boundary.
+

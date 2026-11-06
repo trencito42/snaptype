@@ -123,3 +123,4 @@ export const workspaceRevisionsTable = mysqlTable('workspace_revisions', {
   currentRevision: int('current_revision').default(1).notNull(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull()
 });
+

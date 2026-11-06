@@ -317,3 +317,4 @@ function evaluateCondition(cond: string, vars: Record<string, any>): boolean {
     return false;
   }
 }
+

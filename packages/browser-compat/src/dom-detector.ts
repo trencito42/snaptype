@@ -99,3 +99,4 @@ export class DomDetector {
     return { category: 'none', element, isSensitive };
   }
 }
+

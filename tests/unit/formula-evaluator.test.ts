@@ -38,3 +38,4 @@ describe('SafeFormulaEvaluator', () => {
     expect(evaluator.evaluate('"Hello " + "world"')).toBe('Hello world');
   });
 });
+

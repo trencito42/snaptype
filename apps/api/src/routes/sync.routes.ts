@@ -54,3 +54,4 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
     return response;
   });
 }
+

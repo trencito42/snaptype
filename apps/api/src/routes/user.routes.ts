@@ -49,3 +49,4 @@ export async function userRoutes(app: FastifyInstance, repo: IRepository, authSe
     return { preferences: updated };
   });
 }
+

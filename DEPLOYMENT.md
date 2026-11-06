@@ -203,3 +203,4 @@ Database nightly backup cron:
 ```bash
 0 2 * * * mysqldump -u snaptype_user -p'SECURE_PASSWORD' snaptype_db | gzip > /backups/snaptype_$(date +\%F).sql.gz
 ```
+
