@@ -74,6 +74,8 @@ SnapType - Production-ready text expansion platform.
 </html>
 `;
 
+    const isProduction = process.env.NODE_ENV === 'production';
+
     if (this.isConfigured && this.transporter) {
       try {
         await this.transporter.sendMail({
@@ -85,15 +87,21 @@ SnapType - Production-ready text expansion platform.
         });
         return true;
       } catch (err: any) {
-        console.error(`[Email] Failed to send email via SMTP to ${email}:`, err.message);
-        // Fallback log
-        console.log(`[Email Fallback] Verification code for ${email}: [ ${code} ]`);
+        console.error(`[Email Error] Failed to send email via SMTP to ${email}: ${err.message}`);
+        // NEVER log OTP codes in production
+        if (!isProduction) {
+          console.log(`[Email Dev Fallback] Local code for ${email}: [ ${code} ]`);
+        }
         return false;
       }
     } else {
-      // In development or local testing: output clearly so user can immediately verify
+      if (isProduction) {
+        console.error(`[Email Error] SMTP is not configured in production environment.`);
+        return false;
+      }
+      // Explicit development/testing console logging only
       console.log(`\n============================================================`);
-      console.log(`[SnapType Auth] Email Verification Code for: ${email}`);
+      console.log(`[SnapType Auth (Dev)] Email Verification Code for: ${email}`);
       console.log(`>>> CODE: [ ${code} ] <<< (Expires in 10 minutes)`);
       console.log(`============================================================\n`);
       return true;

@@ -1,7 +1,12 @@
 import { Snippet, UserPreferences, DEFAULT_PREFERENCES, SyncResponse } from '@snaptype/shared';
 import { BrowserApi } from '@snaptype/browser-compat';
 
-const API_BASE = 'http://localhost:3000/api/v1';
+declare const __SNAPTYPE_API_URL__: string;
+
+const API_BASE = typeof __SNAPTYPE_API_URL__ !== 'undefined' 
+  ? __SNAPTYPE_API_URL__ 
+  : 'http://localhost:3000/api/v1';
+
 
 interface BackgroundState {
   token: string | null;
@@ -99,10 +104,31 @@ async function syncWithServer(): Promise<boolean> {
       }
     });
 
+    // Notify all active tabs that data/deletions have updated
+    notifyTabsDataUpdated();
+
     return true;
   } catch (err) {
     console.warn('[SnapType Background] Sync failed (server might be offline):', err);
     return false;
+  }
+}
+
+function notifyTabsDataUpdated() {
+  if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+    try {
+      chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+          if (tab.id) {
+            chrome.tabs.sendMessage(tab.id, { action: 'REFRESH_DATA' }, () => {
+              if (chrome.runtime.lastError) { /* ignore inactive tabs */ }
+            });
+          }
+        }
+      });
+    } catch {
+      // Ignore background tab query errors
+    }
   }
 }
 
@@ -117,6 +143,8 @@ async function handleLogout() {
 
   const sessionStore = BrowserApi.getSessionStorage();
   await sessionStore.clear();
+
+  notifyTabsDataUpdated();
 }
 
 // Runtime message dispatcher

@@ -76,6 +76,28 @@ export const ImportSnippetsSchema = z.object({
   conflictStrategy: z.enum(['skip', 'overwrite', 'duplicate']).default('duplicate')
 });
 
+export const DataTableColumnSchema = z.object({
+  id: z.string(),
+  name: z.string().trim().min(1).max(50),
+  key: z.string().trim().min(1).max(50).regex(/^[a-zA-Z0-9_]+$/),
+  type: z.enum(['text', 'number'])
+});
+
+export const CreateDataTableSchema = z.object({
+  workspaceId: z.string().uuid().optional(),
+  name: z.string().trim().min(1, 'Name is required').max(100),
+  description: z.string().trim().max(300).nullable().optional(),
+  columns: z.array(DataTableColumnSchema).min(1, 'At least one column is required')
+});
+
+export const CreateDataTableRowSchema = z.object({
+  data: z.record(z.any())
+});
+
+export const UpdateDataTableRowSchema = z.object({
+  data: z.record(z.any())
+});
+
 export type RequestOTPInput = z.infer<typeof RequestOTPSchema>;
 export type VerifyOTPInput = z.infer<typeof VerifyOTPSchema>;
 export type CompleteRegistrationInput = z.infer<typeof CompleteRegistrationSchema>;
@@ -85,4 +107,7 @@ export type CreateSnippetInput = z.infer<typeof CreateSnippetSchema>;
 export type UpdateSnippetInput = z.infer<typeof UpdateSnippetSchema>;
 export type UpdatePreferencesInput = z.infer<typeof UpdatePreferencesSchema>;
 export type ImportSnippetsInput = z.infer<typeof ImportSnippetsSchema>;
+export type CreateDataTableInput = z.infer<typeof CreateDataTableSchema>;
+export type CreateDataTableRowInput = z.infer<typeof CreateDataTableRowSchema>;
+
 

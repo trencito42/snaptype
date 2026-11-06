@@ -1,0 +1,48 @@
+name: SnapType CI & Release Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Shared Packages
+        run: npm run build:packages
+
+      - name: Run Test Suites (Unit, Integration & Benchmarks)
+        run: npm test
+
+      - name: Build Web Application
+        run: npm run build:web
+
+      - name: Build Browser Extensions (Chrome & Firefox MV3)
+        run: npm run build:extension
+
+      - name: Package Extension Archives
+        run: npm run package:extensions
+
+      - name: Upload Extension Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snaptype-extensions
+          path: |
+            dist/chrome-extension.zip
+            dist/firefox-extension.zip
+          retention-days: 14

@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS `folders` (
   `icon` VARCHAR(50) NULL,
   `is_favorite` BOOLEAN NOT NULL DEFAULT FALSE,
   `sort_order` INT NOT NULL DEFAULT 0,
+  `revision` INT NOT NULL DEFAULT 1,
   `deleted_at` TIMESTAMP NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -94,6 +95,7 @@ CREATE TABLE IF NOT EXISTS `snippets` (
   `is_enabled` BOOLEAN NOT NULL DEFAULT TRUE,
   `site_restrictions` JSON NULL,
   `version` INT NOT NULL DEFAULT 1,
+  `revision` INT NOT NULL DEFAULT 1,
   `usage_count` INT NOT NULL DEFAULT 0,
   `last_used_at` TIMESTAMP NULL,
   `deleted_at` TIMESTAMP NULL,
@@ -141,4 +143,41 @@ CREATE TABLE IF NOT EXISTS `workspace_revisions` (
   PRIMARY KEY (`workspace_id`),
   CONSTRAINT `fk_workspace_revisions_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `sync_tombstones` (
+  `id` VARCHAR(36) NOT NULL,
+  `workspace_id` VARCHAR(36) NOT NULL,
+  `entity_type` VARCHAR(20) NOT NULL,
+  `entity_id` VARCHAR(36) NOT NULL,
+  `revision` INT NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_tombstones_ws_rev` (`workspace_id`, `revision`),
+  CONSTRAINT `fk_tombstones_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `data_tables` (
+  `id` VARCHAR(36) NOT NULL,
+  `workspace_id` VARCHAR(36) NOT NULL,
+  `name` VARCHAR(150) NOT NULL,
+  `description` VARCHAR(500) NULL,
+  `columns` JSON NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_data_tables_workspace` (`workspace_id`),
+  CONSTRAINT `fk_data_tables_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `data_rows` (
+  `id` VARCHAR(36) NOT NULL,
+  `table_id` VARCHAR(36) NOT NULL,
+  `data` JSON NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_data_rows_table` (`table_id`),
+  CONSTRAINT `fk_data_rows_table` FOREIGN KEY (`table_id`) REFERENCES `data_tables` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 

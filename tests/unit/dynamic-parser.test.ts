@@ -90,5 +90,23 @@ Notes: {{paragraph:details|label="Detalii"}}`;
     const loopRes = renderSnippet('{{snippet:loopA}}', { snippetResolver: resolver });
     expect(loopRes.text).toContain('[Circular or excessive nested snippet]');
   });
+
+  it('performs safe dynamic table lookups without database exposure', () => {
+    const mockTableResolver = (tableName: string, lookupKey: string, lookupVal: any, targetCol: string) => {
+      if (tableName === 'products' && lookupKey === 'sku' && lookupVal === 'PROD-101' && targetCol === 'price') {
+        return '49.99';
+      }
+      return null;
+    };
+
+    const template = 'Price for {{input:code}}: ${{table:products|lookup="sku"|value=code|column="price"}}';
+    const res = renderSnippet(template, {
+      variables: { code: 'PROD-101' },
+      tableResolver: mockTableResolver
+    });
+
+    expect(res.text).toBe('Price for PROD-101: $49.99');
+  });
 });
+
 

@@ -130,3 +130,31 @@ export interface DynamicParseResult {
   fields: DynamicFormField[];
   staticPreview: string;
 }
+
+export interface DataTableColumn {
+  id: string;
+  name: string;
+  key: string;
+  type: 'text' | 'number';
+}
+
+export interface DataTableRow {
+  id: string;
+  tableId: string;
+  data: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataTable {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string | null;
+  columns: DataTableColumn[];
+  rowCount?: number;
+  rows?: DataTableRow[];
+  createdAt: string;
+  updatedAt: string;
+}
+

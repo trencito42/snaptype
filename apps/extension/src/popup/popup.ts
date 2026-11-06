@@ -1,7 +1,9 @@
 import { BrowserApi } from '@snaptype/browser-compat';
 import { Snippet } from '@snaptype/shared';
+import { renderSnippet } from '@snaptype/snippet-engine';
 
-const authView = document.getElementById('auth-view')!;
+declare const __SNAPTYPE_APP_URL__: string;
+const APP_URL = typeof __SNAPTYPE_APP_URL__ !== 'undefined' ? __SNAPTYPE_APP_URL__ : 'http://localhost:5173';
 const mainView = document.getElementById('main-view')!;
 const emailStep = document.getElementById('email-step')!;
 const otpStep = document.getElementById('otp-step')!;
@@ -50,23 +52,54 @@ function showMainView(data: any) {
 function renderSnippetList(snippets: Snippet[]) {
   snippetList.innerHTML = '';
   if (snippets.length === 0) {
-    snippetList.innerHTML = '<div style="padding: 20px; text-align: center; color: #686b66; font-size: 12px;">No snippets available</div>';
+    const emptyDiv = document.createElement('div');
+    emptyDiv.style.padding = '20px';
+    emptyDiv.style.textAlign = 'center';
+    emptyDiv.style.color = '#686b66';
+    emptyDiv.style.fontSize = '12px';
+    emptyDiv.textContent = 'No snippets available';
+    snippetList.appendChild(emptyDiv);
     return;
   }
 
   for (const s of snippets) {
     const row = document.createElement('div');
     row.className = 'snippet-row';
-    row.innerHTML = `
-      <span class="row-title">${s.name}</span>
-      <span class="row-shortcut">${s.shortcut}</span>
-    `;
 
-    // Click to copy or insert
+    const titleEl = document.createElement('span');
+    titleEl.className = 'row-title';
+    titleEl.textContent = s.name;
+
+    const shortcutEl = document.createElement('span');
+    shortcutEl.className = 'row-shortcut';
+    shortcutEl.textContent = s.shortcut;
+
+    row.appendChild(titleEl);
+    row.appendChild(shortcutEl);
+
+    // Click to copy rendered text and attempt insertion into active tab
     row.onclick = async () => {
-      await navigator.clipboard.writeText(s.plainContent);
+      const rendered = renderSnippet(s.plainContent);
+      await navigator.clipboard.writeText(rendered.text);
       row.style.backgroundColor = '#eefde9';
       setTimeout(() => (row.style.backgroundColor = ''), 800);
+
+      // Attempt active tab insertion
+      try {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              action: 'INSERT_TEXT',
+              text: rendered.text,
+              cursorOffset: rendered.cursorOffset
+            }, () => {
+              if (chrome.runtime.lastError) { /* ignore tab errors */ }
+            });
+          }
+        });
+      } catch {
+        // clipboard write succeeded as safe fallback
+      }
     };
 
     snippetList.appendChild(row);
@@ -133,7 +166,7 @@ btnSyncNow?.addEventListener('click', async () => {
 
 // Open Dashboard
 btnOpenDash?.addEventListener('click', () => {
-  chrome.tabs.create({ url: 'http://localhost:5173' });
+  chrome.tabs.create({ url: APP_URL });
 });
 
 // Logout

@@ -2,8 +2,8 @@ import { drizzle, MySql2Database } from 'drizzle-orm/mysql2';
 import mysql from 'mysql2/promise';
 import * as schema from './schema.js';
 import { IRepository, InMemoryRepository } from './repository.js';
-import { eq, and, sql, isNull, inArray } from 'drizzle-orm';
-import { User, Workspace, WorkspaceMember, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES } from '@snaptype/shared';
+import { eq, and, sql, isNull, inArray, gt } from 'drizzle-orm';
+import { User, Workspace, WorkspaceMember, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES, DataTable, DataTableColumn, DataTableRow } from '@snaptype/shared';
 import crypto from 'node:crypto';
 const uuidv4 = () => crypto.randomUUID();
 
@@ -148,21 +148,29 @@ export class MySQLRepository implements IRepository {
   async createWorkspace(name: string, slug: string, ownerId: string, isPersonal: boolean): Promise<Workspace> {
     const id = uuidv4();
     const now = new Date();
-    await this.db.insert(schema.workspacesTable).values({
-      id,
-      name,
-      slug,
-      ownerId,
-      isPersonal,
-      createdAt: now,
-      updatedAt: now
+    await this.db.transaction(async (tx) => {
+      await tx.insert(schema.workspacesTable).values({
+        id,
+        name,
+        slug,
+        ownerId,
+        isPersonal,
+        createdAt: now,
+        updatedAt: now
+      });
+      await tx.insert(schema.workspaceRevisionsTable).values({
+        workspaceId: id,
+        currentRevision: 1,
+        updatedAt: now
+      });
+      await tx.insert(schema.workspaceMembersTable).values({
+        id: uuidv4(),
+        workspaceId: id,
+        userId: ownerId,
+        role: 'owner',
+        createdAt: now
+      });
     });
-    await this.db.insert(schema.workspaceRevisionsTable).values({
-      workspaceId: id,
-      currentRevision: 1,
-      updatedAt: now
-    });
-    await this.addWorkspaceMember(id, ownerId, 'owner');
     return {
       id,
       name,
@@ -223,6 +231,29 @@ export class MySQLRepository implements IRepository {
       role: rows[0].role as WorkspaceRole,
       createdAt: rows[0].createdAt.toISOString()
     };
+  }
+
+  async findWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
+    const rows = await this.db.select({
+      member: schema.workspaceMembersTable,
+      user: schema.usersTable
+    })
+      .from(schema.workspaceMembersTable)
+      .innerJoin(schema.usersTable, eq(schema.workspaceMembersTable.userId, schema.usersTable.id))
+      .where(eq(schema.workspaceMembersTable.workspaceId, workspaceId));
+
+    return rows.map((r) => ({
+      id: r.member.id,
+      workspaceId: r.member.workspaceId,
+      userId: r.member.userId,
+      role: r.member.role as WorkspaceRole,
+      createdAt: r.member.createdAt.toISOString(),
+      user: {
+        id: r.user.id,
+        email: r.user.email,
+        name: r.user.name
+      }
+    }));
   }
 
   async addWorkspaceMember(workspaceId: string, userId: string, role: WorkspaceRole): Promise<WorkspaceMember> {
@@ -288,6 +319,7 @@ export class MySQLRepository implements IRepository {
   async createFolder(workspaceId: string, data: Partial<Folder>): Promise<Folder> {
     const id = uuidv4();
     const now = new Date();
+    const newRev = await this.bumpWorkspaceRevision(workspaceId);
     await this.db.insert(schema.foldersTable).values({
       id,
       workspaceId,
@@ -297,10 +329,10 @@ export class MySQLRepository implements IRepository {
       icon: data.icon || null,
       isFavorite: Boolean(data.isFavorite),
       sortOrder: data.sortOrder || 0,
+      revision: newRev,
       createdAt: now,
       updatedAt: now
     });
-    await this.bumpWorkspaceRevision(workspaceId);
     return {
       id,
       workspaceId,
@@ -320,6 +352,7 @@ export class MySQLRepository implements IRepository {
     if (!existing) throw new Error('Folder not found');
 
     const now = new Date();
+    const newRev = await this.bumpWorkspaceRevision(existing.workspaceId);
     await this.db.update(schema.foldersTable).set({
       name: data.name,
       parentId: data.parentId,
@@ -327,10 +360,10 @@ export class MySQLRepository implements IRepository {
       icon: data.icon,
       isFavorite: data.isFavorite,
       sortOrder: data.sortOrder,
+      revision: newRev,
       updatedAt: now
     }).where(eq(schema.foldersTable.id, id));
 
-    await this.bumpWorkspaceRevision(existing.workspaceId);
     return (await this.findFolderById(id))!;
   }
 
@@ -338,10 +371,21 @@ export class MySQLRepository implements IRepository {
     const existing = await this.findFolderById(id);
     if (!existing) return;
     const now = new Date();
-    await this.db.update(schema.foldersTable).set({ deletedAt: now }).where(eq(schema.foldersTable.id, id));
+    const newRev = await this.bumpWorkspaceRevision(existing.workspaceId);
+
+    await this.db.update(schema.foldersTable).set({ deletedAt: now, revision: newRev }).where(eq(schema.foldersTable.id, id));
+    // Record deletion tombstone
+    await this.db.insert(schema.syncTombstonesTable).values({
+      id: uuidv4(),
+      workspaceId: existing.workspaceId,
+      entityType: 'folder',
+      entityId: id,
+      revision: newRev,
+      createdAt: now
+    });
+
     // Detach child snippets
-    await this.db.update(schema.snippetsTable).set({ folderId: null, updatedAt: now }).where(eq(schema.snippetsTable.folderId, id));
-    await this.bumpWorkspaceRevision(existing.workspaceId);
+    await this.db.update(schema.snippetsTable).set({ folderId: null, updatedAt: now, revision: newRev }).where(eq(schema.snippetsTable.folderId, id));
   }
 
   async findSnippets(workspaceId: string, options: { folderId?: string | null; search?: string; tag?: string; favoriteOnly?: boolean } = {}): Promise<Snippet[]> {
@@ -431,6 +475,8 @@ export class MySQLRepository implements IRepository {
   async createSnippet(workspaceId: string, data: Partial<Snippet>, createdById?: string): Promise<Snippet> {
     const id = uuidv4();
     const now = new Date();
+    const newRev = await this.bumpWorkspaceRevision(workspaceId);
+
     await this.db.insert(schema.snippetsTable).values({
       id,
       workspaceId,
@@ -445,6 +491,7 @@ export class MySQLRepository implements IRepository {
       isEnabled: data.isEnabled !== false,
       siteRestrictions: data.siteRestrictions || null,
       version: 1,
+      revision: newRev,
       usageCount: 0,
       createdAt: now,
       updatedAt: now
@@ -462,7 +509,6 @@ export class MySQLRepository implements IRepository {
       createdAt: now
     });
 
-    await this.bumpWorkspaceRevision(workspaceId);
     return (await this.findSnippetById(id))!;
   }
 
@@ -472,6 +518,8 @@ export class MySQLRepository implements IRepository {
 
     const nextVer = existing.version + 1;
     const now = new Date();
+    const newRev = await this.bumpWorkspaceRevision(existing.workspaceId);
+
     await this.db.update(schema.snippetsTable).set({
       name: data.name,
       shortcut: data.shortcut,
@@ -484,6 +532,7 @@ export class MySQLRepository implements IRepository {
       isEnabled: data.isEnabled,
       siteRestrictions: data.siteRestrictions,
       version: nextVer,
+      revision: newRev,
       updatedAt: now
     }).where(eq(schema.snippetsTable.id, id));
 
@@ -499,7 +548,6 @@ export class MySQLRepository implements IRepository {
       createdAt: now
     });
 
-    await this.bumpWorkspaceRevision(existing.workspaceId);
     return (await this.findSnippetById(id))!;
   }
 
@@ -507,8 +555,19 @@ export class MySQLRepository implements IRepository {
     const existing = await this.findSnippetById(id);
     if (!existing) return;
     const now = new Date();
-    await this.db.update(schema.snippetsTable).set({ deletedAt: now }).where(eq(schema.snippetsTable.id, id));
-    await this.bumpWorkspaceRevision(existing.workspaceId);
+    const newRev = await this.bumpWorkspaceRevision(existing.workspaceId);
+
+    await this.db.update(schema.snippetsTable).set({ deletedAt: now, revision: newRev }).where(eq(schema.snippetsTable.id, id));
+    
+    // Record deletion tombstone
+    await this.db.insert(schema.syncTombstonesTable).values({
+      id: uuidv4(),
+      workspaceId: existing.workspaceId,
+      entityType: 'snippet',
+      entityId: id,
+      revision: newRev,
+      createdAt: now
+    });
   }
 
   async incrementSnippetUsage(id: string): Promise<void> {
@@ -558,15 +617,89 @@ export class MySQLRepository implements IRepository {
 
   async getSyncData(workspaceId: string, lastRevision: number) {
     const currentRev = await this.getWorkspaceRevision(workspaceId);
-    const snippets = await this.findSnippets(workspaceId);
-    const folders = await this.findFolders(workspaceId);
+
+    if (lastRevision === 0) {
+      const snippets = await this.findSnippets(workspaceId);
+      const folders = await this.findFolders(workspaceId);
+      return {
+        currentRevision: currentRev,
+        snippets,
+        deletedSnippetIds: [],
+        folders,
+        deletedFolderIds: []
+      };
+    }
+
+    // 1. Fetch changed snippets (revision > lastRevision AND not deleted)
+    const changedSnippetRows = await this.db.select().from(schema.snippetsTable)
+      .where(and(
+        eq(schema.snippetsTable.workspaceId, workspaceId),
+        gt(schema.snippetsTable.revision, lastRevision),
+        isNull(schema.snippetsTable.deletedAt)
+      ));
+
+    const changedSnippets: Snippet[] = changedSnippetRows.map((r) => ({
+      id: r.id,
+      workspaceId: r.workspaceId,
+      folderId: r.folderId,
+      name: r.name,
+      shortcut: r.shortcut,
+      plainContent: r.plainContent,
+      richContent: r.richContent,
+      description: r.description,
+      tags: r.tags as string[],
+      isFavorite: r.isFavorite,
+      isEnabled: r.isEnabled,
+      siteRestrictions: r.siteRestrictions,
+      version: r.version,
+      usageCount: r.usageCount,
+      lastUsedAt: r.lastUsedAt?.toISOString() || null,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString()
+    }));
+
+    // 2. Fetch changed folders (revision > lastRevision AND not deleted)
+    const changedFolderRows = await this.db.select().from(schema.foldersTable)
+      .where(and(
+        eq(schema.foldersTable.workspaceId, workspaceId),
+        gt(schema.foldersTable.revision, lastRevision),
+        isNull(schema.foldersTable.deletedAt)
+      ));
+
+    const changedFolders: Folder[] = changedFolderRows.map((r) => ({
+      id: r.id,
+      workspaceId: r.workspaceId,
+      parentId: r.parentId,
+      name: r.name,
+      color: r.color,
+      icon: r.icon,
+      isFavorite: r.isFavorite,
+      sortOrder: r.sortOrder,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString()
+    }));
+
+    // 3. Fetch deleted items from tombstones (revision > lastRevision)
+    const tombstones = await this.db.select().from(schema.syncTombstonesTable)
+      .where(and(
+        eq(schema.syncTombstonesTable.workspaceId, workspaceId),
+        gt(schema.syncTombstonesTable.revision, lastRevision)
+      ));
+
+    const deletedSnippetIds = tombstones
+      .filter((t) => t.entityType === 'snippet')
+      .map((t) => t.entityId);
+
+    const deletedFolderIds = tombstones
+      .filter((t) => t.entityType === 'folder')
+      .map((t) => t.entityId);
 
     return {
       currentRevision: currentRev,
-      snippets,
-      deletedSnippetIds: [],
-      folders,
-      deletedFolderIds: []
+      snippets: changedSnippets,
+      deletedSnippetIds,
+      folders: changedFolders,
+      deletedFolderIds
     };
   }
 
@@ -611,5 +744,148 @@ export class MySQLRepository implements IRepository {
     });
 
     return merged;
+  }
+
+  // Data Tables
+  async findTables(workspaceId: string): Promise<DataTable[]> {
+    const tables = await this.db.select().from(schema.dataTablesTable).where(eq(schema.dataTablesTable.workspaceId, workspaceId));
+    const results: DataTable[] = [];
+    for (const t of tables) {
+      const rowCountRes = await this.db.select({ count: sql<number>`count(*)` })
+        .from(schema.dataRowsTable)
+        .where(eq(schema.dataRowsTable.tableId, t.id));
+      const count = Number(rowCountRes[0]?.count ?? 0);
+      results.push({
+        id: t.id,
+        workspaceId: t.workspaceId,
+        name: t.name,
+        description: t.description,
+        columns: t.columns as DataTableColumn[],
+        rowCount: count,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString()
+      });
+    }
+    return results;
+  }
+
+  async findTableById(id: string): Promise<DataTable | null> {
+    const tables = await this.db.select().from(schema.dataTablesTable).where(eq(schema.dataTablesTable.id, id)).limit(1);
+    if (!tables[0]) return null;
+    const t = tables[0];
+    const rowCountRes = await this.db.select({ count: sql<number>`count(*)` })
+      .from(schema.dataRowsTable)
+      .where(eq(schema.dataRowsTable.tableId, t.id));
+    const count = Number(rowCountRes[0]?.count ?? 0);
+    return {
+      id: t.id,
+      workspaceId: t.workspaceId,
+      name: t.name,
+      description: t.description,
+      columns: t.columns as DataTableColumn[],
+      rowCount: count,
+      createdAt: t.createdAt.toISOString(),
+      updatedAt: t.updatedAt.toISOString()
+    };
+  }
+
+  async createTable(workspaceId: string, data: { name: string; description?: string | null; columns: DataTableColumn[] }): Promise<DataTable> {
+    const id = uuidv4();
+    const now = new Date();
+    await this.db.insert(schema.dataTablesTable).values({
+      id,
+      workspaceId,
+      name: data.name,
+      description: data.description ?? null,
+      columns: data.columns,
+      createdAt: now,
+      updatedAt: now
+    });
+    return {
+      id,
+      workspaceId,
+      name: data.name,
+      description: data.description ?? null,
+      columns: data.columns,
+      rowCount: 0,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString()
+    };
+  }
+
+  async updateTable(id: string, data: Partial<{ name: string; description?: string | null; columns: DataTableColumn[] }>): Promise<DataTable> {
+    const table = await this.findTableById(id);
+    if (!table) throw new Error('Table not found');
+    const now = new Date();
+    await this.db.update(schema.dataTablesTable).set({
+      name: data.name ?? table.name,
+      description: data.description !== undefined ? data.description : table.description,
+      columns: data.columns ?? table.columns,
+      updatedAt: now
+    }).where(eq(schema.dataTablesTable.id, id));
+
+    return {
+      ...table,
+      name: data.name ?? table.name,
+      description: data.description !== undefined ? data.description : table.description,
+      columns: data.columns ?? table.columns,
+      updatedAt: now.toISOString()
+    };
+  }
+
+  async deleteTable(id: string): Promise<void> {
+    await this.db.delete(schema.dataTablesTable).where(eq(schema.dataTablesTable.id, id));
+  }
+
+  async findTableRows(tableId: string): Promise<DataTableRow[]> {
+    const rows = await this.db.select().from(schema.dataRowsTable).where(eq(schema.dataRowsTable.tableId, tableId));
+    return rows.map(r => ({
+      id: r.id,
+      tableId: r.tableId,
+      data: r.data as Record<string, any>,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString()
+    }));
+  }
+
+  async createTableRow(tableId: string, data: Record<string, any>): Promise<DataTableRow> {
+    const id = uuidv4();
+    const now = new Date();
+    await this.db.insert(schema.dataRowsTable).values({
+      id,
+      tableId,
+      data,
+      createdAt: now,
+      updatedAt: now
+    });
+    return {
+      id,
+      tableId,
+      data,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString()
+    };
+  }
+
+  async updateTableRow(id: string, data: Record<string, any>): Promise<DataTableRow> {
+    const now = new Date();
+    const existing = await this.db.select().from(schema.dataRowsTable).where(eq(schema.dataRowsTable.id, id)).limit(1);
+    if (!existing[0]) throw new Error('Row not found');
+    const merged = { ...(existing[0].data as Record<string, any>), ...data };
+    await this.db.update(schema.dataRowsTable).set({
+      data: merged,
+      updatedAt: now
+    }).where(eq(schema.dataRowsTable.id, id));
+    return {
+      id,
+      tableId: existing[0].tableId,
+      data: merged,
+      createdAt: existing[0].createdAt.toISOString(),
+      updatedAt: now.toISOString()
+    };
+  }
+
+  async deleteTableRow(id: string): Promise<void> {
+    await this.db.delete(schema.dataRowsTable).where(eq(schema.dataRowsTable.id, id));
   }
 }

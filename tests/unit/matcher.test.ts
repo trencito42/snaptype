@@ -104,5 +104,42 @@ describe('ReverseShortcutMatcher', () => {
     const match = matcher.findMatch('disabled_snip', { ...DEFAULT_PREFERENCES, triggerMode: 'immediate' });
     expect(match).toBeNull();
   });
+
+  it('prevents accidental expansion inside unrelated words (word boundary protection)', () => {
+    const snippets = [createSnippet('cerbonus')];
+    const matcher = new ReverseShortcutMatcher(snippets, false);
+
+    // Typing inside a word should NOT match
+    const insideWord = matcher.findMatch('teacherbonus', { ...DEFAULT_PREFERENCES, triggerMode: 'immediate' });
+    expect(insideWord).toBeNull();
+
+    // After space or at word boundary should match
+    const afterSpace = matcher.findMatch('Salut cerbonus', { ...DEFAULT_PREFERENCES, triggerMode: 'immediate' });
+    expect(afterSpace).not.toBeNull();
+    expect(afterSpace?.matchedShortcut).toBe('cerbonus');
+  });
+
+  it('handles custom delimiter trigger mode correctly', () => {
+    const snippets = [
+      createSnippet('cerbonus'),
+      createSnippet('/salut')
+    ];
+    const matcher = new ReverseShortcutMatcher(snippets, false);
+
+    // Typing without delimiter should NOT trigger
+    const noDelim = matcher.findMatch('cerbonus', { ...DEFAULT_PREFERENCES, triggerMode: 'delimiter', delimiterChar: '/' });
+    expect(noDelim).toBeNull();
+
+    // Typing with delimiter prefix SHOULD trigger and include delimiter in matchLength
+    const withDelim = matcher.findMatch('/cerbonus', { ...DEFAULT_PREFERENCES, triggerMode: 'delimiter', delimiterChar: '/' });
+    expect(withDelim).not.toBeNull();
+    expect(withDelim?.matchedShortcut).toBe('cerbonus');
+    expect(withDelim?.matchLength).toBe(9); // '/' + 'cerbonus'
+
+    // Inherently delimited shortcut
+    const inherent = matcher.findMatch('/salut', { ...DEFAULT_PREFERENCES, triggerMode: 'delimiter', delimiterChar: '/' });
+    expect(inherent).not.toBeNull();
+    expect(inherent?.matchedShortcut).toBe('/salut');
+  });
 });
 

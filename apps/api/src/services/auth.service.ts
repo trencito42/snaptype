@@ -12,7 +12,12 @@ export class AuthService {
   private hmacSecret: string;
 
   constructor(private repo: IRepository) {
-    this.hmacSecret = process.env.OTP_HMAC_SECRET || 'snaptype-default-dev-hmac-secret-32-chars!';
+    const isProduction = process.env.NODE_ENV === 'production';
+    const secret = process.env.OTP_HMAC_SECRET;
+    if (isProduction && (!secret || secret.length < 32)) {
+      throw new Error('[Security Fatal] OTP_HMAC_SECRET must be set and at least 32 characters long in production.');
+    }
+    this.hmacSecret = secret || 'snaptype-default-dev-hmac-secret-32-chars!';
   }
 
   private hashOTP(email: string, code: string): string {
@@ -51,7 +56,13 @@ export class AuthService {
     await this.repo.createEmailChallenge(normalizedEmail, hashedCode, expiresAt);
 
     // Send email (no OTP logged here)
-    await emailService.sendVerificationCode(normalizedEmail, code);
+    const sent = await emailService.sendVerificationCode(normalizedEmail, code);
+    if (!sent) {
+      return {
+        success: false,
+        message: 'Unable to deliver verification email. Please check your email address or SMTP configuration.'
+      };
+    }
 
     return {
       success: true,

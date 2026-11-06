@@ -18,7 +18,8 @@ export async function authRoutes(app: FastifyInstance, authService: AuthService)
     const result = await authService.requestOTP(email);
 
     if (!result.success) {
-      return reply.status(429).send({
+      const statusCode = result.cooldownRemaining ? 429 : 503;
+      return reply.status(statusCode).send({
         error: result.message,
         cooldownRemaining: result.cooldownRemaining
       });

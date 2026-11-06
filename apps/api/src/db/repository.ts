@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 const uuidv4 = () => crypto.randomUUID();
-import { User, Workspace, WorkspaceMember, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES } from '@snaptype/shared';
+import { User, Workspace, WorkspaceMember, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES, DataTable, DataTableColumn, DataTableRow } from '@snaptype/shared';
 
 export interface VerificationChallengeRecord {
   id: string;
@@ -47,6 +47,7 @@ export interface IRepository {
   findUserWorkspaces(userId: string): Promise<{ workspace: Workspace; role: WorkspaceRole }[]>;
   findWorkspaceById(id: string): Promise<Workspace | null>;
   findWorkspaceMember(workspaceId: string, userId: string): Promise<WorkspaceMember | null>;
+  findWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]>;
   addWorkspaceMember(workspaceId: string, userId: string, role: WorkspaceRole): Promise<WorkspaceMember>;
   removeWorkspaceMember(workspaceId: string, userId: string): Promise<void>;
 
@@ -81,6 +82,17 @@ export interface IRepository {
   // Preferences
   getUserPreferences(userId: string): Promise<UserPreferences>;
   updateUserPreferences(userId: string, data: Partial<UserPreferences>): Promise<UserPreferences>;
+
+  // Data Tables
+  findTables(workspaceId: string): Promise<DataTable[]>;
+  findTableById(id: string): Promise<DataTable | null>;
+  createTable(workspaceId: string, data: { name: string; description?: string | null; columns: DataTableColumn[] }): Promise<DataTable>;
+  updateTable(id: string, data: Partial<{ name: string; description?: string | null; columns: DataTableColumn[] }>): Promise<DataTable>;
+  deleteTable(id: string): Promise<void>;
+  findTableRows(tableId: string): Promise<DataTableRow[]>;
+  createTableRow(tableId: string, data: Record<string, any>): Promise<DataTableRow>;
+  updateTableRow(id: string, data: Record<string, any>): Promise<DataTableRow>;
+  deleteTableRow(id: string): Promise<void>;
 }
 
 /**
@@ -98,6 +110,8 @@ export class InMemoryRepository implements IRepository {
   private revisions: SnippetRevision[] = [];
   private preferences = new Map<string, UserPreferences>();
   private workspaceRevisions = new Map<string, number>();
+  private tables = new Map<string, DataTable>();
+  private tableRows = new Map<string, DataTableRow>();
 
   // Tracking deleted items for revision-based synchronization
   private deletedSnippets: { id: string; workspaceId: string; revision: number }[] = [];
@@ -256,6 +270,20 @@ export class InMemoryRepository implements IRepository {
       }
     }
     return null;
+  }
+
+  async findWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
+    const list: WorkspaceMember[] = [];
+    for (const mem of this.workspaceMembers.values()) {
+      if (mem.workspaceId === workspaceId) {
+        const u = this.users.get(mem.userId);
+        list.push({
+          ...mem,
+          user: u ? { id: u.id, email: u.email, name: u.name } : undefined
+        });
+      }
+    }
+    return list;
   }
 
   async addWorkspaceMember(workspaceId: string, userId: string, role: WorkspaceRole): Promise<WorkspaceMember> {
@@ -593,5 +621,111 @@ export class InMemoryRepository implements IRepository {
     const updated = { ...current, ...data };
     this.preferences.set(userId, updated);
     return updated;
+  }
+
+  // Data Tables
+  async findTables(workspaceId: string): Promise<DataTable[]> {
+    const results: DataTable[] = [];
+    for (const table of this.tables.values()) {
+      if (table.workspaceId === workspaceId) {
+        let count = 0;
+        for (const row of this.tableRows.values()) {
+          if (row.tableId === table.id) count++;
+        }
+        results.push({ ...table, rowCount: count });
+      }
+    }
+    return results;
+  }
+
+  async findTableById(id: string): Promise<DataTable | null> {
+    const table = this.tables.get(id);
+    if (!table) return null;
+    let count = 0;
+    for (const row of this.tableRows.values()) {
+      if (row.tableId === table.id) count++;
+    }
+    return { ...table, rowCount: count };
+  }
+
+  async createTable(workspaceId: string, data: { name: string; description?: string | null; columns: DataTableColumn[] }): Promise<DataTable> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const table: DataTable = {
+      id,
+      workspaceId,
+      name: data.name,
+      description: data.description ?? null,
+      columns: data.columns,
+      rowCount: 0,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.tables.set(id, table);
+    return table;
+  }
+
+  async updateTable(id: string, data: Partial<{ name: string; description?: string | null; columns: DataTableColumn[] }>): Promise<DataTable> {
+    const table = this.tables.get(id);
+    if (!table) throw new Error('Table not found');
+    const updated: DataTable = {
+      ...table,
+      name: data.name ?? table.name,
+      description: data.description !== undefined ? data.description : table.description,
+      columns: data.columns ?? table.columns,
+      updatedAt: new Date().toISOString()
+    };
+    this.tables.set(id, updated);
+    return updated;
+  }
+
+  async deleteTable(id: string): Promise<void> {
+    this.tables.delete(id);
+    // Delete cascade rows
+    for (const [rowId, row] of this.tableRows.entries()) {
+      if (row.tableId === id) {
+        this.tableRows.delete(rowId);
+      }
+    }
+  }
+
+  async findTableRows(tableId: string): Promise<DataTableRow[]> {
+    const rows: DataTableRow[] = [];
+    for (const row of this.tableRows.values()) {
+      if (row.tableId === tableId) {
+        rows.push(row);
+      }
+    }
+    return rows;
+  }
+
+  async createTableRow(tableId: string, data: Record<string, any>): Promise<DataTableRow> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const row: DataTableRow = {
+      id,
+      tableId,
+      data,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.tableRows.set(id, row);
+    return row;
+  }
+
+  async updateTableRow(id: string, data: Record<string, any>): Promise<DataTableRow> {
+    const row = this.tableRows.get(id);
+    if (!row) throw new Error('Row not found');
+    const updated: DataTableRow = {
+      ...row,
+      data: { ...row.data, ...data },
+      updatedAt: new Date().toISOString()
+    };
+    this.tableRows.set(id, updated);
+    return updated;
+  }
+
+  async deleteTableRow(id: string): Promise<void> {
+    this.tableRows.delete(id);
   }
 }

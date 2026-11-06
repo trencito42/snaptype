@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../api.js';
-import { X, Download, Upload, Check, AlertCircle } from 'lucide-react';
+import { parseCSV, serializeCSV } from '@snaptype/shared';
+import { X, Download, Upload, Check, AlertCircle, FileSpreadsheet, FileCode } from 'lucide-react';
 
 interface ImportExportModalProps {
   isOpen: boolean;
@@ -19,7 +20,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
 
   if (!isOpen) return null;
 
-  const handleExport = async () => {
+  const handleExportJSON = async () => {
     try {
       const data = await api.exportWorkspace();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -34,9 +35,52 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const data = await api.exportWorkspace();
+      const snippets = data.snippets || [];
+      const headers = ['name', 'shortcut', 'plainContent', 'tags', 'description'];
+      const rows = snippets.map((s: any) => [
+        s.name || '',
+        s.shortcut || '',
+        s.plainContent || '',
+        Array.isArray(s.tags) ? s.tags.join(';') : (s.tags || ''),
+        s.description || ''
+      ]);
+      const csvContent = serializeCSV([headers, ...rows]);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `snaptype-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'CSV Export failed');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.name.endsWith('.csv')) {
+      setImportFormat('csv');
+    } else if (file.name.endsWith('.json')) {
+      setImportFormat('snaptype_json');
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setImportText(content || '');
+    };
+    reader.readAsText(file);
+  };
+
   const handleImport = async () => {
     if (!importText.trim()) {
-      setError('Please provide snippets data to import');
+      setError('Please provide snippets data to import or select a file');
       return;
     }
 
@@ -48,21 +92,37 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
       let parsedSnippets: any[] = [];
 
       if (importFormat === 'csv') {
-        // Parse CSV lines
-        const lines = importText.split('\n').map((l) => l.trim()).filter(Boolean);
-        for (let i = 1; i < lines.length; i++) {
-          const parts = lines[i].split(',').map((p) => p.trim());
-          if (parts.length >= 3) {
-            parsedSnippets.push({
-              name: parts[0],
-              shortcut: parts[1],
-              plainContent: parts[2].replace(/\\n/g, '\n'),
-              tags: parts[3] ? parts[3].split(';') : []
-            });
-          }
+        const rows = parseCSV(importText);
+        if (rows.length < 2) {
+          throw new Error('CSV must contain a header row and at least one data row');
+        }
+
+        const headers = rows[0].map(h => h.trim().toLowerCase());
+        const nameIdx = headers.indexOf('name');
+        const shortcutIdx = headers.indexOf('shortcut');
+        const contentIdx = headers.findIndex(h => h === 'plaincontent' || h === 'content' || h === 'text' || h === 'snippet');
+        const tagsIdx = headers.indexOf('tags');
+        const descIdx = headers.indexOf('description');
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length === 0 || (row.length === 1 && !row[0].trim())) continue;
+
+          const name = nameIdx !== -1 ? row[nameIdx] : (row[0] || 'Imported Snippet');
+          const shortcut = shortcutIdx !== -1 ? row[shortcutIdx] : (row[1] || `imp_${i}`);
+          const plainContent = contentIdx !== -1 ? row[contentIdx] : (row[2] || '');
+          const tags = tagsIdx !== -1 && row[tagsIdx] ? row[tagsIdx].split(';').map(t => t.trim()) : [];
+          const description = descIdx !== -1 ? row[descIdx] : '';
+
+          parsedSnippets.push({
+            name,
+            shortcut,
+            plainContent,
+            tags,
+            description
+          });
         }
       } else {
-        // JSON parsing
         const parsed = JSON.parse(importText);
         parsedSnippets = Array.isArray(parsed) ? parsed : parsed.snippets || [];
       }
@@ -96,7 +156,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
-        width: 540,
+        width: 580,
         maxHeight: '90vh',
         overflowY: 'auto',
         padding: 28,
@@ -131,11 +191,16 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
         {activeTab === 'export' ? (
           <div>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20 }}>
-              Download a complete JSON backup of your snippets, organized folders, and tag taxonomies.
+              Export your snippets, organized folders, and shortcuts. Choose standard JSON backup or RFC-4180 CSV spreadsheet format.
             </p>
-            <button className="btn btn-primary" onClick={handleExport}>
-              <Download size={16} /> Download SnapType JSON Backup
-            </button>
+            <div style={{ display: 'flex', gap: 14 }}>
+              <button className="btn btn-primary" onClick={handleExportJSON}>
+                <FileCode size={16} /> Export SnapType JSON
+              </button>
+              <button className="btn btn-secondary" onClick={handleExportCSV}>
+                <FileSpreadsheet size={16} /> Export RFC-4180 CSV
+              </button>
+            </div>
           </div>
         ) : (
           <div>
@@ -151,7 +216,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
                 >
                   <option value="snaptype_json">SnapType JSON</option>
                   <option value="textblaze_json">Text Blaze Migration (JSON)</option>
-                  <option value="csv">CSV (Name, Shortcut, Content, Tags)</option>
+                  <option value="csv">RFC-4180 CSV (name, shortcut, plainContent, tags)</option>
                 </select>
               </div>
 
@@ -172,13 +237,21 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
-                Paste JSON or CSV Data
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 700 }}>
+                  Upload File or Paste Data
+                </label>
+                <input
+                  type="file"
+                  accept=".csv,.json"
+                  onChange={handleFileUpload}
+                  style={{ fontSize: 12 }}
+                />
+              </div>
               <textarea
                 className="input input-mono"
                 style={{ height: 160, fontSize: 12 }}
-                placeholder='[{"name":"Greeting","shortcut":"hi","plainContent":"Hello world"}]'
+                placeholder={importFormat === 'csv' ? 'name,shortcut,plainContent,tags\nGreeting,hi,"Hello there!",general' : '[{"name":"Greeting","shortcut":"hi","plainContent":"Hello world"}]'}
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
               />
@@ -215,4 +288,3 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
     </div>
   );
 };
-

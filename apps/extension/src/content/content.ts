@@ -74,6 +74,16 @@ class ContentEngine {
         if (message.action === 'REFRESH_DATA') {
           this.refreshData();
         }
+        if (message.action === 'INSERT_TEXT') {
+          const target = this.activeTarget || (DomDetector.getActiveElement() as HTMLElement);
+          if (target && !this.isExcluded) {
+            TextInserter.insert(target, {
+              matchLength: 0,
+              replacementText: message.text,
+              cursorOffset: message.cursorOffset
+            });
+          }
+        }
       });
     }
   }
@@ -161,7 +171,13 @@ class ContentEngine {
 
     const header = document.createElement('div');
     header.className = 'snaptype-modal-header';
-    header.innerHTML = `<strong>${snippet.name}</strong> <span class="snaptype-badge">${snippet.shortcut}</span>`;
+    const titleBold = document.createElement('strong');
+    titleBold.textContent = snippet.name;
+    const badgeSpan = document.createElement('span');
+    badgeSpan.className = 'snaptype-badge';
+    badgeSpan.textContent = snippet.shortcut;
+    header.appendChild(titleBold);
+    header.appendChild(badgeSpan);
     modal.appendChild(header);
 
     const form = document.createElement('div');
@@ -266,13 +282,29 @@ class ContentEngine {
   }
 
   /**
-   * Compact Floating Keyboard Assistant
+   * Compact Floating Keyboard Assistant with Reliable Target Preservation (P0.4 & P0.7)
    */
   private openAssistant() {
     if (this.assistantOverlay) {
       this.assistantOverlay.remove();
       this.assistantOverlay = null;
       return;
+    }
+
+    // 1. Snapshot original active editable target BEFORE focus moves to search input
+    const currentActive = DomDetector.getActiveElement();
+    let originalTarget: HTMLElement | null = null;
+    if (currentActive) {
+      const inspected = DomDetector.inspectElement(currentActive);
+      if (inspected.category !== 'none') {
+        originalTarget = currentActive;
+      }
+    }
+    if (!originalTarget && this.activeTarget) {
+      const inspected = DomDetector.inspectElement(this.activeTarget);
+      if (inspected.category !== 'none') {
+        originalTarget = this.activeTarget;
+      }
     }
 
     const overlay = document.createElement('div');
@@ -301,17 +333,28 @@ class ContentEngine {
     const renderList = () => {
       listContainer.innerHTML = '';
       if (filteredList.length === 0) {
-        listContainer.innerHTML = '<div class="snaptype-empty">No matching snippets</div>';
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'snaptype-empty';
+        emptyDiv.textContent = 'No matching snippets';
+        listContainer.appendChild(emptyDiv);
         return;
       }
 
       filteredList.forEach((snip, idx) => {
         const item = document.createElement('div');
         item.className = `snaptype-assistant-item ${idx === selectedIndex ? 'selected' : ''}`;
-        item.innerHTML = `
-          <div class="snaptype-item-title">${snip.name}</div>
-          <div class="snaptype-item-shortcut">${snip.shortcut}</div>
-        `;
+
+        // Safe DOM elements preventing HTML injection (P0.7)
+        const titleEl = document.createElement('div');
+        titleEl.className = 'snaptype-item-title';
+        titleEl.textContent = snip.name;
+
+        const shortcutEl = document.createElement('div');
+        shortcutEl.className = 'snaptype-item-shortcut';
+        shortcutEl.textContent = snip.shortcut;
+
+        item.appendChild(titleEl);
+        item.appendChild(shortcutEl);
         item.onclick = () => insertAssistantSnippet(snip);
         listContainer.appendChild(item);
       });
@@ -321,8 +364,14 @@ class ContentEngine {
       overlay.remove();
       this.assistantOverlay = null;
 
-      const target = this.activeTarget || (DomDetector.getActiveElement() as HTMLElement);
-      if (!target) return;
+      // Ensure we NEVER insert into the assistant search input
+      const target = originalTarget || this.activeTarget;
+      if (!target || target === searchInput || !document.contains(target)) {
+        return;
+      }
+
+      // Restore focus to original target
+      target.focus();
 
       const dynamicFields = extractFormFields(snip.plainContent);
       if (dynamicFields.length > 0) {

@@ -198,6 +198,78 @@ class ApiClient {
       body: JSON.stringify(data)
     });
   }
+
+  // Workspace Members
+  public async getWorkspaceMembers(workspaceId: string) {
+    return this.request<{ members: any[] }>(`/workspaces/${workspaceId}/members`);
+  }
+
+  public async addWorkspaceMember(workspaceId: string, email: string, role: string = 'editor') {
+    return this.request<{ member: any }>(`/workspaces/${workspaceId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role })
+    });
+  }
+
+  public async removeWorkspaceMember(workspaceId: string, userId: string) {
+    return this.request<{ success: boolean }>(`/workspaces/${workspaceId}/members/${userId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Data Tables
+  public async getTables(workspaceId?: string) {
+    const qs = workspaceId ? `?workspaceId=${workspaceId}` : '';
+    return this.request<{ tables: any[] }>(`/tables${qs}`);
+  }
+
+  public async getTable(id: string) {
+    return this.request<{ table: any }>(`/tables/${id}`);
+  }
+
+  public async createTable(data: { workspaceId?: string; name: string; description?: string | null; columns: any[] }) {
+    return this.request<{ table: any }>('/tables', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public async updateTable(id: string, data: Partial<{ name: string; description?: string | null; columns: any[] }>) {
+    return this.request<{ table: any }>(`/tables/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public async deleteTable(id: string) {
+    return this.request<{ success: boolean }>(`/tables/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  public async getTableRows(tableId: string) {
+    return this.request<{ rows: any[] }>(`/tables/${tableId}/rows`);
+  }
+
+  public async createTableRow(tableId: string, data: Record<string, any>) {
+    return this.request<{ row: any }>(`/tables/${tableId}/rows`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public async updateTableRow(tableId: string, rowId: string, data: Record<string, any>) {
+    return this.request<{ row: any }>(`/tables/${tableId}/rows/${rowId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public async deleteTableRow(tableId: string, rowId: string) {
+    return this.request<{ success: boolean }>(`/tables/${tableId}/rows/${rowId}`, {
+      method: 'DELETE'
+    });
+  }
 }
 
 export const api = new ApiClient();

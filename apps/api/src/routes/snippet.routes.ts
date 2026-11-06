@@ -139,10 +139,15 @@ export async function snippetRoutes(
   });
 
   // Record usage
-  app.post('/api/v1/snippets/:id/usage', { preHandler: requireAuth }, async (request) => {
+  app.post('/api/v1/snippets/:id/usage', { preHandler: requireAuth }, async (request, reply) => {
+    const user = request.user!;
     const { id } = request.params as { id: string };
-    await snippetService.recordUsage(id);
-    return { success: true };
+    try {
+      await snippetService.recordUsage(id, user.id);
+      return { success: true };
+    } catch (err: any) {
+      return reply.status(403).send({ error: err.message });
+    }
   });
 }
 

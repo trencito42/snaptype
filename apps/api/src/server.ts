@@ -12,6 +12,7 @@ import { folderRoutes } from './routes/folder.routes.js';
 import { snippetRoutes } from './routes/snippet.routes.js';
 import { syncRoutes } from './routes/sync.routes.js';
 import { transferRoutes } from './routes/transfer.routes.js';
+import { tableRoutes } from './routes/table.routes.js';
 import { emailService } from './services/email.service.js';
 
 dotenv.config();
@@ -71,6 +72,7 @@ export async function createServer(): Promise<FastifyInstance> {
   await snippetRoutes(app, repo, authService, snippetService);
   await syncRoutes(app, repo, authService);
   await transferRoutes(app, repo, authService, snippetService);
+  await tableRoutes(app, repo, authService);
 
   return app;
 }

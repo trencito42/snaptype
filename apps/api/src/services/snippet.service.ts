@@ -102,6 +102,12 @@ export class SnippetService {
 
   public async duplicateSnippet(id: string, userId: string): Promise<Snippet> {
     const original = await this.getSnippet(id, userId);
+
+    const hasEditorAccess = await this.verifyWorkspaceAccess(original.workspaceId, userId, 'editor');
+    if (!hasEditorAccess) {
+      throw new Error('Unauthorized: Editor access required to duplicate snippet');
+    }
+
     let newShortcut = `${original.shortcut}_copy`;
     let counter = 1;
     while (await this.repo.findSnippetByShortcut(original.workspaceId, newShortcut)) {
@@ -127,7 +133,15 @@ export class SnippetService {
     return this.repo.findSnippetRevisions(snippet.id);
   }
 
-  public async recordUsage(id: string): Promise<void> {
+  public async recordUsage(id: string, userId: string): Promise<void> {
+    const snippet = await this.repo.findSnippetById(id);
+    if (!snippet) return;
+
+    const hasAccess = await this.verifyWorkspaceAccess(snippet.workspaceId, userId, 'viewer');
+    if (!hasAccess) {
+      throw new Error('Unauthorized workspace access');
+    }
+
     await this.repo.incrementSnippetUsage(id);
   }
 

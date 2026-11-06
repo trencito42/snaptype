@@ -11,6 +11,7 @@ export interface RenderContext {
     url?: string;
   };
   snippetResolver?: (shortcut: string) => string | null;
+  tableResolver?: (tableName: string, lookupKey: string, lookupVal: any, targetCol: string) => string | null;
   currentDate?: Date;
   depth?: number;
 }
@@ -200,6 +201,28 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
         }
       }
       return '';
+    }
+
+    // Table lookup: {{table:tableName|lookup=key|value=val|column=targetCol}}
+    if (raw.toLowerCase().startsWith('table:')) {
+      const rest = raw.slice(6).trim();
+      const pipeIdx = rest.indexOf('|');
+      const tableName = (pipeIdx !== -1 ? rest.slice(0, pipeIdx) : rest).trim();
+      const rawAttrs = pipeIdx !== -1 ? rest.slice(pipeIdx + 1) : '';
+      const attrs = parseAttributes(rawAttrs);
+
+      const lookupKey = attrs['lookup'] || attrs['key'] || '';
+      let lookupVal = attrs['value'] || attrs['val'] || '';
+      if (lookupVal && Object.prototype.hasOwnProperty.call(vars, lookupVal)) {
+        lookupVal = vars[lookupVal];
+      }
+      const targetCol = attrs['column'] || attrs['col'] || '';
+
+      if (context.tableResolver && tableName && lookupKey && targetCol) {
+        const val = context.tableResolver(tableName, lookupKey, lookupVal, targetCol);
+        if (val !== null && val !== undefined) return String(val);
+      }
+      return attrs['default'] || '';
     }
 
     // Interactive field tags: {{input:name...}}, {{paragraph:name...}}, {{dropdown:name...}}, etc.

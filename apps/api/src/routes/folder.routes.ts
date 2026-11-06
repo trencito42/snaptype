@@ -70,6 +70,16 @@ export async function folderRoutes(app: FastifyInstance, repo: IRepository, auth
       return reply.status(400).send({ error: 'Invalid folder update data', details: parsed.error.flatten() });
     }
 
+    if (parsed.data.parentId !== undefined && parsed.data.parentId !== null) {
+      if (parsed.data.parentId === id) {
+        return reply.status(400).send({ error: 'Folder cannot be its own parent' });
+      }
+      const parentFolder = await repo.findFolderById(parsed.data.parentId);
+      if (!parentFolder || parentFolder.workspaceId !== folder.workspaceId) {
+        return reply.status(400).send({ error: 'Parent folder must belong to the same workspace' });
+      }
+    }
+
     const updated = await repo.updateFolder(id, parsed.data);
     return { folder: updated };
   });

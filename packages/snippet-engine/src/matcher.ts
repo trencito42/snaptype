@@ -88,8 +88,30 @@ export class ReverseShortcutMatcher {
       if (lastChar !== ' ' && lastChar !== '\t' && lastChar !== '\n') {
         return null;
       }
-      // Look back starting before the space
+      // Look back starting before the space/tab
       return this.matchReverse(text.slice(0, len - 1), prefs, true);
+    }
+
+    if (prefs.triggerMode === 'delimiter') {
+      const delimiter = prefs.delimiterChar || '/';
+      const candidate = this.matchReverse(text, prefs, false);
+      if (!candidate) return null;
+
+      // If shortcut already has delimiter (e.g. /salut)
+      if (candidate.matchedShortcut.startsWith(delimiter)) {
+        return { ...candidate, triggerUsed: 'delimiter' };
+      }
+
+      // Check if preceded by configured delimiter character
+      const startIdx = len - candidate.matchLength;
+      if (startIdx >= delimiter.length && text.slice(startIdx - delimiter.length, startIdx) === delimiter) {
+        return {
+          ...candidate,
+          matchLength: candidate.matchLength + delimiter.length,
+          triggerUsed: 'delimiter'
+        };
+      }
+      return null;
     }
 
     return this.matchReverse(text, prefs, false);
@@ -120,7 +142,7 @@ export class ReverseShortcutMatcher {
         // If the shortcut starts with a non-word char (like `/` or `#` or `@`), it's safe anywhere
         const startsWithSymbol = !/[\p{L}\p{N}]/u.test(current.shortcut[0]);
 
-        if (startsWithSymbol || !isWordChar || prefs.triggerMode === 'immediate') {
+        if (startsWithSymbol || !isWordChar) {
           matchedNode = current;
           matchedLength = depth;
           // Prefer longest matching shortcut

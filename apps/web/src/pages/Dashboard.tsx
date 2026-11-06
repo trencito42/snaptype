@@ -20,8 +20,19 @@ import {
   Eye,
   Sliders,
   ChevronRight,
-  MoreVertical
+  MoreVertical,
+  Users,
+  Table as TableIcon,
+  Sparkles,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  Link
 } from 'lucide-react';
+import { CommandBrowserModal } from './CommandBrowserModal.js';
+import { WorkspaceMembersModal } from './WorkspaceMembersModal.js';
+import { DataTablesModal } from './DataTablesModal.js';
 
 interface DashboardProps {
   onOpenSettings: () => void;
@@ -70,6 +81,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Folder creation modal
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+
+  // Modals for Advanced Features
+  const [showCommandBrowser, setShowCommandBrowser] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showDataTablesModal, setShowDataTablesModal] = useState(false);
 
   // Initial Data Load
   useEffect(() => {
@@ -292,8 +308,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const insertCommand = (syntax: string) => {
-    setEditPlainContent((prev) => prev + syntax);
+    setEditPlainContent((prev) => (prev ? `${prev} ${syntax}` : syntax));
   };
+
+  const wrapFormat = (prefix: string, suffix: string = prefix, defaultText: string = 'text') => {
+    setEditPlainContent((prev) => (prev ? `${prev} ${prefix}${defaultText}${suffix}` : `${prefix}${defaultText}${suffix}`));
+  };
+
+  const currentWorkspace = workspaces.find((w) => w.workspace.id === activeWorkspaceId);
+  const currentRole = currentWorkspace?.role || 'owner';
+  const currentWorkspaceName = currentWorkspace?.workspace.name || 'Workspace';
 
   // Filtered snippets for list
   const filteredSnippets = snippets.filter((s) => {
@@ -430,6 +454,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Navigation Bottom Footer */}
         <div style={{ padding: 12, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start' }} onClick={() => setShowDataTablesModal(true)}>
+            <TableIcon size={15} /> Data Tables
+          </button>
+          <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start' }} onClick={() => setShowMembersModal(true)}>
+            <Users size={15} /> Team Members
+          </button>
           <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start' }} onClick={onOpenSettings}>
             <Sliders size={15} /> Preferences
           </button>
@@ -639,7 +669,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Command Bar Pills */}
+                {/* Command Bar Pills & Full Browser */}
                 <div style={{
                   display: 'flex',
                   flexWrap: 'wrap',
@@ -647,56 +677,134 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   padding: '10px 14px',
                   backgroundColor: 'var(--surface-subtle)',
                   borderRadius: 'var(--radius-sm)',
-                  marginBottom: 12
+                  marginBottom: 10,
+                  alignItems: 'center'
                 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, alignSelf: 'center', marginRight: 4 }}>
-                    Insert:
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ fontWeight: 700, gap: 6 }}
+                    onClick={() => setShowCommandBrowser(true)}
+                  >
+                    <Sparkles size={14} /> Browse Commands (9 Categories)
+                  </button>
+
+                  <div style={{ width: 1, height: 20, backgroundColor: 'var(--border)', margin: '0 4px' }} />
+
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                    Quick:
                   </span>
+                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{cursor}}')}>
+                    Cursor
+                  </button>
                   <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{date:YYYY-MM-DD}}')}>
-                    + Date
+                    Date
                   </button>
                   <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{time:HH:mm}}')}>
-                    + Time
+                    Time
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{input:customerName|label="Nume client"}}')}>
-                    + Input
+                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{form:name}}')}>
+                    Form Input
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{paragraph:notes|label="Note"}}')}>
-                    + Paragraph
-                  </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{dropdown:status|options="În verificare,Aprobat,Respins"}}')}>
-                    + Dropdown
-                  </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{cursor}}')}>
-                    + Cursor
+                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{form:status|options="Open,Pending,Resolved"}}')}>
+                    Dropdown
                   </button>
                   <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{clipboard}}')}>
-                    + Clipboard
+                    Clipboard
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{formula: 10 * 1.2}}')}>
-                    + Formula
+                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{calc:price * 1.2}}')}>
+                    Formula
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{note: internal memo}}')}>
-                    + Note
+                  <button className="btn btn-secondary btn-sm" onClick={() => insertCommand('{{include:snippet_shortcut}}')}>
+                    Include
+                  </button>
+                </div>
+
+                {/* Rich Text & Formatting Toolbar */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '6px 10px',
+                  borderTop: '1px solid var(--border)',
+                  borderLeft: '1px solid var(--border)',
+                  borderRight: '1px solid var(--border)',
+                  borderTopLeftRadius: 'var(--radius-sm)',
+                  borderTopRightRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--surface)'
+                }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => wrapFormat('**', '**', 'bold text')}
+                    title="Bold"
+                  >
+                    <Bold size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => wrapFormat('*', '*', 'italic text')}
+                    title="Italic"
+                  >
+                    <Italic size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => wrapFormat('`', '`', 'code')}
+                    title="Inline Code"
+                  >
+                    <Code size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => wrapFormat('[', '](https://example.com)', 'link text')}
+                    title="Link"
+                  >
+                    <Link size={14} />
+                  </button>
+                  <div style={{ width: 1, height: 16, backgroundColor: 'var(--border)', margin: '0 4px' }} />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => insertCommand('\n- Item 1\n- Item 2')}
+                    title="Bullet List"
+                  >
+                    <List size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => insertCommand('\n1. First\n2. Second')}
+                    title="Numbered List"
+                  >
+                    <ListOrdered size={14} />
                   </button>
                 </div>
 
                 {/* Main Content Area */}
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
-                    Snippet Template Content
-                  </label>
                   <textarea
                     className="input input-mono"
                     style={{
-                      height: 320,
+                      height: 300,
                       resize: 'vertical',
                       fontSize: 14,
                       lineHeight: 1.6,
-                      padding: 16
+                      padding: 16,
+                      borderTopLeftRadius: 0,
+                      borderTopRightRadius: 0
                     }}
                     value={editPlainContent}
                     onChange={(e) => setEditPlainContent(e.target.value)}
+                    placeholder="Enter your snippet text, formatting, or dynamic {{tags}} here..."
                   />
                 </div>
 
@@ -903,6 +1011,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </form>
         </div>
       )}
+      {/* Command Browser Modal (9 Categories) */}
+      <CommandBrowserModal
+        isOpen={showCommandBrowser}
+        onClose={() => setShowCommandBrowser(false)}
+        onInsertCommand={(syntax) => insertCommand(syntax)}
+      />
+
+      {/* Workspace Team Members Modal */}
+      <WorkspaceMembersModal
+        isOpen={showMembersModal}
+        workspaceId={activeWorkspaceId}
+        workspaceName={currentWorkspaceName}
+        currentUserRole={currentRole}
+        onClose={() => setShowMembersModal(false)}
+      />
+
+      {/* Data Tables (Lookup Tables) Modal */}
+      <DataTablesModal
+        isOpen={showDataTablesModal}
+        workspaceId={activeWorkspaceId}
+        onClose={() => setShowDataTablesModal(false)}
+      />
     </div>
   );
 };

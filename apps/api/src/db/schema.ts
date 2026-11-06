@@ -61,6 +61,7 @@ export const foldersTable = mysqlTable('folders', {
   icon: varchar('icon', { length: 50 }),
   isFavorite: boolean('is_favorite').default(false).notNull(),
   sortOrder: int('sort_order').default(0).notNull(),
+  revision: int('revision').default(1).notNull(),
   deletedAt: timestamp('deleted_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull()
@@ -82,6 +83,7 @@ export const snippetsTable = mysqlTable('snippets', {
   isEnabled: boolean('is_enabled').default(true).notNull(),
   siteRestrictions: json('site_restrictions').$type<{ mode: 'allow' | 'block'; domains: string[] } | null>(),
   version: int('version').default(1).notNull(),
+  revision: int('revision').default(1).notNull(),
   usageCount: int('usage_count').default(0).notNull(),
   lastUsedAt: timestamp('last_used_at'),
   deletedAt: timestamp('deleted_at'),
@@ -123,4 +125,38 @@ export const workspaceRevisionsTable = mysqlTable('workspace_revisions', {
   currentRevision: int('current_revision').default(1).notNull(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull()
 });
+
+export const syncTombstonesTable = mysqlTable('sync_tombstones', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  workspaceId: varchar('workspace_id', { length: 36 }).notNull().references(() => workspacesTable.id, { onDelete: 'cascade' }),
+  entityType: varchar('entity_type', { length: 20 }).notNull(), // 'snippet' | 'folder'
+  entityId: varchar('entity_id', { length: 36 }).notNull(),
+  revision: int('revision').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+}, (table) => [
+  index('idx_tombstones_ws_rev').on(table.workspaceId, table.revision)
+]);
+
+export const dataTablesTable = mysqlTable('data_tables', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  workspaceId: varchar('workspace_id', { length: 36 }).notNull().references(() => workspacesTable.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 150 }).notNull(),
+  description: varchar('description', { length: 500 }),
+  columns: json('columns').$type<Array<{ id: string; name: string; key: string; type: 'text' | 'number' }>>().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull()
+}, (table) => [
+  index('idx_data_tables_workspace').on(table.workspaceId)
+]);
+
+export const dataRowsTable = mysqlTable('data_rows', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  tableId: varchar('table_id', { length: 36 }).notNull().references(() => dataTablesTable.id, { onDelete: 'cascade' }),
+  data: json('data').$type<Record<string, any>>().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull()
+}, (table) => [
+  index('idx_data_rows_table').on(table.tableId)
+]);
+
 

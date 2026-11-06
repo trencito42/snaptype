@@ -7,6 +7,12 @@ const args = process.argv.slice(2);
 const targetArg = args.find((a) => a.startsWith('--target='));
 const targets = targetArg ? [targetArg.split('=')[1]] : ['chrome', 'firefox'];
 
+const apiUrlArg = args.find((a) => a.startsWith('--api-url='));
+const appUrlArg = args.find((a) => a.startsWith('--app-url='));
+
+const API_URL = (apiUrlArg ? apiUrlArg.split('=')[1] : null) || process.env.SNAPTYPE_API_URL || 'http://localhost:3000/api/v1';
+const APP_URL = (appUrlArg ? appUrlArg.split('=')[1] : null) || process.env.SNAPTYPE_APP_URL || 'http://localhost:5173';
+
 const ROOT_DIST = path.resolve('../../dist');
 
 async function buildTarget(target) {
@@ -15,6 +21,13 @@ async function buildTarget(target) {
   fs.mkdirSync(path.join(outDir, 'icons'), { recursive: true });
 
   console.log(`\n🔨 Building SnapType Extension for [${target.toUpperCase()}]...`);
+  console.log(`📡 Configured API Origin: ${API_URL}`);
+  console.log(`🖥️  Configured App Origin: ${APP_URL}`);
+
+  const defines = {
+    '__SNAPTYPE_API_URL__': JSON.stringify(API_URL),
+    '__SNAPTYPE_APP_URL__': JSON.stringify(APP_URL)
+  };
 
   // 1. Build background script
   // Note: Chrome MV3 supports module or service_worker, Firefox MV3 scripts
@@ -23,6 +36,7 @@ async function buildTarget(target) {
     outfile: path.join(outDir, 'background.js'),
     bundle: true,
     minify: true,
+    define: defines,
     format: target === 'chrome' ? 'esm' : 'iife',
     platform: 'browser',
     target: ['es2022']
@@ -34,6 +48,7 @@ async function buildTarget(target) {
     outfile: path.join(outDir, 'content.js'),
     bundle: true,
     minify: true,
+    define: defines,
     format: 'iife',
     platform: 'browser',
     target: ['es2022']
@@ -45,14 +60,29 @@ async function buildTarget(target) {
     outfile: path.join(outDir, 'popup.js'),
     bundle: true,
     minify: true,
+    define: defines,
     format: 'esm',
     platform: 'browser',
     target: ['es2022']
   });
 
-  // 4. Copy manifest
+  // 4. Generate dynamic manifest with appropriate host permissions
   const manifestFile = target === 'chrome' ? 'src/manifest.chrome.json' : 'src/manifest.firefox.json';
-  fs.copyFileSync(manifestFile, path.join(outDir, 'manifest.json'));
+  const manifestRaw = fs.readFileSync(manifestFile, 'utf-8');
+  const manifest = JSON.parse(manifestRaw);
+
+  // Extract base origin from API_URL (e.g. https://api.snaptype.com/*)
+  try {
+    const urlObj = new URL(API_URL);
+    const hostPattern = `${urlObj.origin}/*`;
+    if (!manifest.host_permissions.includes(hostPattern)) {
+      manifest.host_permissions.push(hostPattern);
+    }
+  } catch {
+    // Keep default host permissions if URL parsing fails
+  }
+
+  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   // 5. Copy CSS & HTML
   fs.copyFileSync('src/content/content.css', path.join(outDir, 'content.css'));
