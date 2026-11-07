@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 set -a; . ./.env; set +a
 
-mysql_q() { docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" snaptype-mysql mysql -uroot -N -s "$MYSQL_DATABASE" "$@"; }
+mysql_q() { docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" snaptype-mysql mysql -h127.0.0.1 --protocol=TCP -uroot -N -s "$MYSQL_DATABASE" "$@"; }
 exec > >(tee /tmp/legacy.log) 2>&1
 annotate() { # $1 title, $2 text -> GitHub annotation (newlines encoded)
   printf '::error title=%s::%s
@@ -23,10 +23,13 @@ trap cleanup EXIT
 
 docker compose down -v >/dev/null 2>&1 || true
 docker compose up -d mysql
-for _ in $(seq 1 40); do
-  if docker exec -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" snaptype-mysql mysqladmin ping -uroot --silent >/dev/null 2>&1; then break; fi
+# Probe over TCP: during first-time init MySQL runs a temporary socket-only server that also answers ping.
+READY=0
+for _ in $(seq 1 60); do
+  if docker exec -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" snaptype-mysql mysqladmin ping -h127.0.0.1 --protocol=TCP -uroot --silent >/dev/null 2>&1; then READY=1; break; fi
   sleep 3
 done
+[ "$READY" = 1 ] || { echo "FAIL: MySQL did not become ready"; exit 1; }
 
 # Precondition: a fresh volume must contain NO SnapType tables (i.e. no latest-schema auto-init).
 TABLES=$(mysql_q -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${MYSQL_DATABASE}'")

@@ -18,7 +18,7 @@ services:
     networks:
       - snaptype_net
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u snaptype_user -p$MYSQL_PASSWORD || exit 1"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --protocol=TCP -u snaptype_user -p$MYSQL_PASSWORD || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
