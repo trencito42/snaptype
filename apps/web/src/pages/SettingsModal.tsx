@@ -75,7 +75,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
-        width: 520,
+        width: 'min(520px, calc(100vw - 24px))',
         maxHeight: '90vh',
         overflowY: 'auto',
         padding: 28,

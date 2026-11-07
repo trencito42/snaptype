@@ -182,3 +182,9 @@ button, input, textarea, select {
 
 html { background: var(--background); }
 @media (max-width: 760px) { .input, textarea.input, select.input { font-size: 16px; } }
+
+/* Two-pane modals collapse to stacked panes on narrow screens */
+@media (max-width: 700px) {
+  .stack-sm { flex-direction: column !important; }
+  .stack-sm > .stack-sm-side { width: 100% !important; max-height: 36%; border-right: 0 !important; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+}

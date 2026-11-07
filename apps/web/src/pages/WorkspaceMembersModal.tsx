@@ -150,7 +150,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
-        width: 580,
+        width: 'min(580px, calc(100vw - 24px))',
         maxHeight: '85vh',
         overflowY: 'auto',
         padding: 24,

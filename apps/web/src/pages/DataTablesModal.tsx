@@ -155,8 +155,8 @@ export const DataTablesModal: React.FC<DataTablesModalProps> = ({
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
-        width: 820,
-        height: 560,
+        width: 'min(820px, calc(100vw - 24px))',
+        height: 'min(560px, calc(100dvh - 24px))',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden'
@@ -187,9 +187,9 @@ export const DataTablesModal: React.FC<DataTablesModalProps> = ({
           </div>
         )}
 
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="stack-sm" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Sidebar */}
-          <div style={{ width: 220, borderRight: '1px solid var(--border)', padding: 12, overflowY: 'auto', background: 'var(--surface)' }}>
+          <div className="stack-sm-side" style={{ width: 220, borderRight: '1px solid var(--border)', padding: 12, overflowY: 'auto', background: 'var(--surface)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Tables</span>
               <button

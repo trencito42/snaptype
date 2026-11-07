@@ -159,7 +159,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
-        width: 580,
+        width: 'min(580px, calc(100vw - 24px))',
         maxHeight: '90vh',
         overflowY: 'auto',
         padding: 28,

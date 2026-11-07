@@ -144,8 +144,8 @@ export const CommandBrowserModal: React.FC<CommandBrowserModalProps> = ({
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
-        width: 760,
-        height: 520,
+        width: 'min(760px, calc(100vw - 24px))',
+        height: 'min(520px, calc(100dvh - 24px))',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -188,10 +188,10 @@ export const CommandBrowserModal: React.FC<CommandBrowserModalProps> = ({
         </div>
 
         {/* Body */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="stack-sm" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Sidebar */}
           {!search.trim() && (
-            <div style={{
+            <div className="stack-sm-side" style={{
               width: 190,
               borderRight: '1px solid var(--border)',
               padding: '10px 8px',
