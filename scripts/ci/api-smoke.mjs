@@ -11,7 +11,9 @@ const PORT = 3200 + Math.floor(Math.random() * 50);
 const API = `http://127.0.0.1:${PORT}/api/v1`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
-const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  -> ' + detail}`); };
+const failures = [];
+const check = (name, ok, detail = '') => { results.push(ok); if (!ok) failures.push(`${name} -> ${detail}`); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  -> ' + detail}`); };
+const annotate = (title, text) => console.log('::error title=' + title + '::' + String(text).split('%').join('%25').split(String.fromCharCode(13)).join('').split(String.fromCharCode(10)).join('%0A').slice(0, 3500));
 
 let log = '';
 const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NODE_ENV: '' };
@@ -23,7 +25,7 @@ process.on('exit', stop);
 
 let health;
 for (let i = 0; i < 90; i++) { try { const r = await fetch(`http://127.0.0.1:${PORT}/health`); if (r.ok) { health = await r.json(); break; } } catch {} await sleep(1000); }
-if (!health) { console.log(log.slice(-1500)); console.log('FAIL  server did not start'); process.exit(1); }
+if (!health) { console.log(log.slice(-1500)); console.log('FAIL  server did not start'); annotate('api-smoke: server did not start', log.slice(-2500)); process.exit(1); }
 check(`server up, database mode = ${health.database?.mode ?? JSON.stringify(health.database)}`, true);
 if (process.env.DATABASE_URL) check('server is using MySQL (not the in-memory fallback)', JSON.stringify(health.database).includes('mysql'), JSON.stringify(health.database));
 
@@ -137,9 +139,11 @@ try {
 } catch (e) {
   console.log('FAIL  smoke run threw: ' + e.message);
   console.log(log.slice(-1200));
+  failures.push('threw: ' + e.message);
   results.push(false);
 }
 const failed = results.filter((r) => !r).length;
+if (failed) annotate('api-smoke failures', failures.join(String.fromCharCode(10)) + String.fromCharCode(10) + '--- server log tail ---' + String.fromCharCode(10) + log.slice(-1500));
 console.log(`\n${results.length - failed}/${results.length} checks passed`);
 stop();
 process.exit(failed ? 1 : 0);
