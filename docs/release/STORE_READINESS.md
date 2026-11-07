@@ -49,7 +49,11 @@ Do not add: speed claims, "works everywhere", "private/secure" superlatives, or 
 
 ## Screenshots
 
-Not produced. Capture from the real extension after a production build against the real host (popup, an expansion in a text field, the fill-in form). The E2E script can be adapted to take them via CDP `Page.captureScreenshot`.
+Six 1280x800 images per store in `docs/release/store/{chrome,firefox}/` (see `docs/release/store/README.md` for how they were made and what they are, including the fictional demo page and the fact that Firefox images reuse the Chrome captures).
+
+## Context menu entries (for the permission/feature description)
+
+On editable fields: a SnapType submenu with the assistant, up to 8 favourite or most-used snippets and Sync. On selected text: "Save selection as a SnapType snippet" (opens the dashboard with the text prefilled). On the toolbar button: open dashboard, sync. Signed out: a single sign-in entry. No extra permission is required beyond `contextMenus`.
 
 ## Update strategy
 
