@@ -6,7 +6,7 @@ Base commit of this work: `c9db21f`. Work is committed directly to `main`; see `
 
 ## Verified so far
 - CI is meaningful: typecheck, tests, web/API/extension builds, packaging, fresh Docker install, **real legacy MySQL upgrade** (CI #19 green), and a **real-Chrome extension E2E** step (added after #19; confirm green on the next run).
-- Real Chrome 157 run of the actual extension: 27/27 checks (login via extension, sync, expansion in textarea/input/contenteditable, password field skipped, server edit propagates, dynamic form/cancel/submit, date command, 409 conflict, workspace isolation, invitation, revocation clears cache, logout clears storage).
+- Real Chrome 157 run of the actual extension: 33/33 checks (login via extension, sync, include/calc/table/conditional, expansion in textarea/input/contenteditable, password field skipped, server edit propagates, dynamic form/cancel/submit, date command, 409 conflict, workspace isolation, invitation, revocation clears cache, logout clears storage).
 - Security/data fixes with regression tests: cross-workspace folder refs, invitation role escalation, admin limits, atomic invitation acceptance (code), OTP SMTP-failure lockout, auth rate limits, proxy IP handling, sync rollback/full-replace/stale responses, import/export fidelity.
 - Homepage rebuilt: Lighthouse mobile 100/100/100/100 (perf/a11y/best-practices/SEO), desktop 90/100/100/100 after the contrast fix; no overflow at 320-1440 px; real-engine demo.
 - Dashboard usable on phones (single-pane navigation, modals fit).
