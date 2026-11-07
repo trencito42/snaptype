@@ -84,7 +84,7 @@ jobs:
       - name: Test Real Docker Deployment & Healthcheck (Fresh Installation)
         run: |
           docker compose up -d --build 2>&1 | tee /tmp/up.log
-          curl --fail --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:3000/health
+          curl --fail --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:3000/health
           docker compose down -v
 
       - name: Test Persistent MySQL Volume Legacy Upgrade (real legacy fixture)

@@ -46,6 +46,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenImportExport,
   onLogout
 }) => {
+  const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches);
+  const [mobilePane, setMobilePane] = useState<'nav' | 'list' | 'editor'>('list');
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 900px)');
+    const onChange = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const showPane = (pane: 'nav' | 'list' | 'editor') => !isMobile || mobilePane === pane;
   const [user, setUser] = useState<User | null>(null);
   const [workspaces, setWorkspaces] = useState<{ workspace: Workspace; role: string }[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>('');
@@ -523,19 +532,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const previewResult = renderSnippet(editPlainContent, { variables: previewVars });
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: 'calc(100dvh - 60px)', minHeight: 0, overflow: 'hidden' }}>
       {/* PANE 1: Folders & Navigation */}
       <div style={{
-        width: 260,
+        width: isMobile ? '100%' : 260,
         borderRight: '1px solid var(--border)',
         backgroundColor: 'var(--surface-subtle)',
-        display: 'flex',
+        display: showPane('nav') ? 'flex' : 'none',
         flexDirection: 'column',
         justifyContent: 'space-between',
         flexShrink: 0
       }}>
         {/* Navigation Top */}
         <div style={{ padding: '16px 12px', overflowY: 'auto' }}>
+          {isMobile && (
+            <button className="btn btn-primary btn-sm" style={{ width: '100%', marginBottom: 12, minHeight: 40 }} onClick={() => setMobilePane('list')}>
+              Show snippets
+            </button>
+          )}
           {/* Workspace Selector (ST-037) */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -684,21 +698,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* PANE 2: Searchable Snippet List */}
       <div style={{
-        width: 320,
+        width: isMobile ? '100%' : 320,
         borderRight: '1px solid var(--border)',
         backgroundColor: 'var(--surface)',
-        display: 'flex',
+        display: showPane('list') ? 'flex' : 'none',
         flexDirection: 'column',
         flexShrink: 0
       }}>
         {/* Search header */}
         <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+          {isMobile && (
+            <button className="btn btn-secondary btn-sm" style={{ width: '100%', marginBottom: 10, minHeight: 40 }} onClick={() => setMobilePane('nav')}>
+              Workspace, folders &amp; settings
+            </button>
+          )}
           <div style={{ position: 'relative', marginBottom: 10 }}>
             <Search size={15} style={{ position: 'absolute', top: 10, left: 10, color: 'var(--text-muted)' }} />
             <input
               type="text"
               className="input"
-              style={{ paddingLeft: 32, fontSize: 13 }}
+              style={{ paddingLeft: 32, fontSize: isMobile ? 16 : 13 }}
               placeholder="Search (Ctrl+K)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -707,7 +726,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <button
             className="btn btn-primary btn-sm"
             style={{ width: '100%' }}
-            onClick={handleCreateSnippet}
+            onClick={async () => { await handleCreateSnippet(); setMobilePane('editor'); }}
           >
             <Plus size={15} /> New Snippet
           </button>
@@ -731,7 +750,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   borderLeft: selectedSnippetId === s.id ? '3px solid var(--ink)' : '3px solid transparent',
                   transition: 'background-color 0.1s ease'
                 }}
-                onClick={() => selectSnippet(s)}
+                onClick={() => { selectSnippet(s); setMobilePane('editor'); }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
@@ -770,18 +789,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* PANE 3: Snippet Editor & Live Preview */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface)', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, display: showPane('editor') ? 'flex' : 'none', flexDirection: 'column', backgroundColor: 'var(--surface)', overflow: 'hidden' }}>
         {selectedSnippet ? (
           <>
             {/* Editor Top Bar */}
             <div style={{
-              padding: '12px 24px',
+              padding: isMobile ? '10px 12px' : '12px 24px',
               borderBottom: '1px solid var(--border)',
               display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
               <div style={{ display: 'flex', gap: 10 }}>
+                {isMobile && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setMobilePane('list')}>
+                    &larr; Snippets
+                  </button>
+                )}
                 <button
                   className="btn btn-ghost btn-sm"
                   style={{
@@ -804,7 +830,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </button>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {saveStatus === 'saving' && <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Saving...</span>}
                 {saveStatus === 'saved' && (
                   <span style={{ fontSize: 13, color: '#166534', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -872,8 +898,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Editor Body */}
             {activeTab === 'editor' ? (
-              <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? 12 : 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
                       Snippet Name
@@ -1085,7 +1111,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             ) : (
               /* Tab 2: Live Preview & Interactive Tester */
-              <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 24 }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? 12 : 24, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr', gap: 24 }}>
                 {/* Simulated Form Input parameters */}
                 <div style={{
                   background: 'var(--surface-subtle)',
@@ -1183,7 +1209,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         }}>
           <div style={{
             background: 'var(--surface)',
-            width: 440,
+            width: 'min(440px, 100%)',
             height: '100%',
             boxShadow: '-4px 0 20px rgba(0,0,0,0.05)',
             padding: 24,
@@ -1249,7 +1275,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
               padding: 24,
-              width: 360
+              width: 'min(360px, calc(100vw - 32px))'
             }}
           >
             <h4 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Create New Folder</h4>
@@ -1292,7 +1318,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
               padding: 24,
-              width: 380
+              width: 'min(380px, calc(100vw - 32px))'
             }}
           >
             <h4 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Create New Workspace</h4>

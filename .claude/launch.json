@@ -1,11 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    {
-      "name": "web",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "preview", "--port", "4173", "--strictPort", "--host", "127.0.0.1", "--outDir", "apps/web/dist", "--config", "apps/web/vite.config.ts"],
-      "port": 4173
-    }
+    { "name": "api", "runtimeExecutable": "npx", "runtimeArgs": ["tsx", "apps/api/src/server.ts"], "port": 3000 },
+    { "name": "web-dev", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "apps/web", "--host", "127.0.0.1", "--port", "5173", "--strictPort"], "port": 5173 }
   ]
 }

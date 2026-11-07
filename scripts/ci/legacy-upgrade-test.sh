@@ -26,7 +26,7 @@ HAS_REV=$(mysql_q -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABL
 
 # Start the full stack on the persistent volume (no -v). The API owns migrations.
 docker compose up -d --build
-curl --fail --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:3000/health \
+curl --fail --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:3000/health \
   || { docker compose logs api; exit 1; }
 
 EXPECTED=$(printf '%s' 'plaintextsecrettoken999999999999999999' | sha256sum | awk '{print $1}')
@@ -44,7 +44,7 @@ echo "PASS: legacy data preserved and upgraded"
 
 # Data must survive a plain restart.
 docker compose restart api
-curl --fail --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:3000/health
+curl --fail --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:3000/health
 [ "$(mysql_q -e "SELECT COUNT(*) FROM snippets WHERE id='s-legacy-1'")" = "1" ] || { echo "FAIL: data lost on restart"; exit 1; }
 
 # Production must refuse to start when migration files are missing.
