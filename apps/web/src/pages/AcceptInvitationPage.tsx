@@ -1,3 +1,4 @@
+import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { Check, X, Mail, Shield, AlertCircle } from 'lucide-react';
@@ -66,7 +67,7 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({
   };
 
   const handleDecline = async () => {
-    if (!confirm('Are you sure you want to decline this invitation?')) return;
+    if (!await confirmDialog('Are you sure you want to decline this invitation?')) return;
     setActionLoading(true);
     try {
       await api.rejectInvitation(token);

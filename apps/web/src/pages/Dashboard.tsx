@@ -1,3 +1,4 @@
+import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { Snippet, Folder, User, Workspace, SnippetRevision } from '@snaptype/shared';
@@ -211,7 +212,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           );
 
           if (!res.success) {
-            const discard = confirm(
+            const discard = await confirmDialog(
               `You have unsaved changes in "${original.name}" that could not be saved. Discard changes and switch?`
             );
             if (!discard) return;
@@ -259,7 +260,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             async (id, p) => (await api.updateSnippet(id, p)).snippet
           );
           if (!res.success) {
-            if (!confirm(`You have unsaved changes in "${original.name}" that could not be saved. Discard and switch workspace?`)) {
+            if (!await confirmDialog(`You have unsaved changes in "${original.name}" that could not be saved. Discard and switch workspace?`)) {
               return;
             }
             draftManagerRef.current.discardDraft(original);
@@ -307,7 +308,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setSnippets([res.snippet, ...snippets]);
       selectSnippet(res.snippet);
     } catch (err: any) {
-      alert(err.message || 'Failed to create snippet');
+      void alertDialog(err.message || 'Failed to create snippet');
     }
   };
 
@@ -349,7 +350,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleReloadServerVersion = async () => {
     if (!selectedSnippetId) return;
 
-    const confirmed = confirm(
+    const confirmed = await confirmDialog(
       'Are you sure you want to discard your local unsaved edits and reload the latest version from the server?'
     );
     if (!confirmed) return;
@@ -392,7 +393,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const handleDeleteSnippet = async () => {
     if (!selectedSnippetId) return;
-    if (!confirm('Are you sure you want to delete this snippet?')) return;
+    if (!await confirmDialog('Delete this snippet? This cannot be undone.', { confirmLabel: 'Delete', danger: true })) return;
 
     try {
       await api.deleteSnippet(selectedSnippetId);
@@ -404,7 +405,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         setSelectedSnippetId(null);
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to delete snippet');
+      void alertDialog(err.message || 'Failed to delete snippet');
     }
   };
 
@@ -415,7 +416,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setSnippets([res.snippet, ...snippets]);
       selectSnippet(res.snippet);
     } catch (err: any) {
-      alert(err.message || 'Failed to duplicate snippet');
+      void alertDialog(err.message || 'Failed to duplicate snippet');
     }
   };
 
@@ -446,7 +447,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setNewFolderName('');
       setShowNewFolderModal(false);
     } catch (err: any) {
-      alert(err.message || 'Failed to create folder');
+      void alertDialog(err.message || 'Failed to create folder');
     }
   };
 
@@ -462,13 +463,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setShowNewWorkspaceModal(false);
       await refreshData(res.workspace.id);
     } catch (err: any) {
-      alert(err.message || 'Failed to create workspace');
+      void alertDialog(err.message || 'Failed to create workspace');
     }
   };
 
   const handleDeleteFolder = async (folderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Delete this folder? Snippets inside will be safely moved to root.')) return;
+    if (!await confirmDialog('Delete this folder? Snippets inside will be moved to the top level.', { confirmLabel: 'Delete folder', danger: true })) return;
 
     try {
       await api.deleteFolder(folderId);
@@ -480,7 +481,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       const sRes = await api.getSnippets({ workspaceId: activeWorkspaceId });
       setSnippets(sRes.snippets);
     } catch (err: any) {
-      alert(err.message || 'Failed to delete folder');
+      void alertDialog(err.message || 'Failed to delete folder');
     }
   };
 
@@ -491,7 +492,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setRevisions(res.revisions);
       setShowHistory(true);
     } catch (err: any) {
-      alert('Failed to load revisions');
+      void alertDialog('Failed to load revisions');
     }
   };
 
@@ -1238,8 +1239,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                     <button
                       className="btn btn-secondary btn-sm"
-                      onClick={() => {
-                        if (confirm(`Restore version ${rev.version}?`)) {
+                      onClick={async () => {
+                        if (await confirmDialog(`Restore version ${rev.version}?`)) {
                           setEditName(rev.name);
                           setEditShortcut(rev.shortcut);
                           setEditPlainContent(rev.plainContent);

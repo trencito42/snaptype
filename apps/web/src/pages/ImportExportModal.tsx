@@ -1,3 +1,4 @@
+import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState } from 'react';
 import { api } from '../api.js';
 import { parseCSV, serializeCSV } from '@snaptype/shared';
@@ -31,7 +32,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(err.message || 'Export failed');
+      void alertDialog(err.message || 'Export failed');
     }
   };
 
@@ -56,7 +57,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(err.message || 'CSV Export failed');
+      void alertDialog(err.message || 'CSV Export failed');
     }
   };
 

@@ -1,3 +1,4 @@
+import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { X, Table, Plus, Trash2, Edit2, Save, AlertCircle } from 'lucide-react';
@@ -102,7 +103,7 @@ export const DataTablesModal: React.FC<DataTablesModalProps> = ({
   };
 
   const handleDeleteTable = async (tableId: string) => {
-    if (!confirm('Are you sure you want to delete this table? All rows will be permanently deleted.')) return;
+    if (!await confirmDialog('Delete this table? All its rows will be permanently deleted.', { confirmLabel: 'Delete table', danger: true })) return;
     try {
       await api.deleteTable(tableId);
       if (activeTableId === tableId) setActiveTableId(null);

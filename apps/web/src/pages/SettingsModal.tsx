@@ -1,3 +1,4 @@
+import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { UserPreferences, DEFAULT_PREFERENCES } from '@snaptype/shared';
@@ -42,7 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         onClose();
       }, 1000);
     } catch (err) {
-      alert('Failed to save settings');
+      void alertDialog('Failed to save settings');
     } finally {
       setLoading(false);
     }

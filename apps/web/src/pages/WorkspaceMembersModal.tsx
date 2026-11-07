@@ -1,3 +1,4 @@
+import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { X, UserPlus, Trash2, Shield, User as UserIcon, Mail, Copy, Check, Clock, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
@@ -107,7 +108,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
   };
 
   const handleRemoveMember = async (userId: string) => {
-    if (!confirm('Are you sure you want to remove this member?')) return;
+    if (!await confirmDialog('Remove this member from the workspace?', { confirmLabel: 'Remove', danger: true })) return;
 
     try {
       await api.removeWorkspaceMember(workspaceId, userId);
@@ -118,7 +119,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
   };
 
   const handleTransferOwnership = async (userId: string, label: string) => {
-    if (!confirm(`Make ${label} the owner of "${workspaceName}"? You will become an administrator and cannot undo this yourself.`)) return;
+    if (!await confirmDialog(`Make ${label} the owner of "${workspaceName}"? You will become an administrator and cannot undo this yourself.`)) return;
     try {
       await api.transferWorkspaceOwnership(workspaceId, userId);
       window.location.reload(); // role and permissions changed: reload to refresh everything that depends on them
@@ -128,7 +129,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
   };
 
   const handleRevokeInvitation = async (invitationId: string) => {
-    if (!confirm('Are you sure you want to revoke this pending invitation?')) return;
+    if (!await confirmDialog('Are you sure you want to revoke this pending invitation?')) return;
 
     try {
       await api.revokeWorkspaceInvitation(workspaceId, invitationId);

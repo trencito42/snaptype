@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from './api.js';
 import { Navbar } from './components/Navbar.js';
 import { Footer } from './components/Footer.js';
+import { DialogHost } from './components/Dialogs.js';
 import { LandingPage } from './pages/LandingPage.js';
 import { Dashboard } from './pages/Dashboard.js';
 import { AuthModal } from './pages/AuthModal.js';
@@ -136,6 +137,8 @@ export const App: React.FC = () => {
       </main>
 
       {currentView !== 'dashboard' && <Footer onNavigate={(view: any) => { setCurrentView(view); window.scrollTo(0, 0); }} />}
+
+      <DialogHost />
 
       {/* Modals */}
       <AuthModal
