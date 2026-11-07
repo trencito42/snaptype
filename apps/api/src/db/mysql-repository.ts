@@ -408,10 +408,38 @@ export class MySQLRepository implements IRepository {
       throw new Error('This invitation was sent to a different email address');
     }
 
+    if (!['admin', 'editor', 'viewer'].includes(inv.role)) {
+      throw new Error('Invitation carries an invalid role');
+    }
+
     return await this.db.transaction(async (tx) => {
-      await tx.update(schema.workspaceInvitationsTable)
+      // Atomic claim: only one concurrent acceptance can flip accepted_at from NULL.
+      const claim: any = await tx.update(schema.workspaceInvitationsTable)
         .set({ acceptedAt: new Date() })
-        .where(eq(schema.workspaceInvitationsTable.id, inv.id));
+        .where(and(
+          eq(schema.workspaceInvitationsTable.id, inv.id),
+          isNull(schema.workspaceInvitationsTable.acceptedAt),
+          isNull(schema.workspaceInvitationsTable.revokedAt)
+        ));
+      const affected = (claim?.[0]?.affectedRows ?? claim?.affectedRows ?? 0) as number;
+      if (affected !== 1) {
+        throw new Error('Invitation has already been accepted or was revoked');
+      }
+
+      const alreadyMember = await tx.select().from(schema.workspaceMembersTable)
+        .where(and(eq(schema.workspaceMembersTable.workspaceId, inv.workspaceId), eq(schema.workspaceMembersTable.userId, userId)))
+        .limit(1);
+      if (alreadyMember[0]) {
+        // Never change an existing member's role through an invitation.
+        return {
+          id: alreadyMember[0].id,
+          workspaceId: inv.workspaceId,
+          userId,
+          role: alreadyMember[0].role as WorkspaceRole,
+          createdAt: alreadyMember[0].createdAt.toISOString(),
+          user: { id: user.id, email: user.email, name: user.name }
+        };
+      }
 
       const memberId = uuidv4();
       const now = new Date();

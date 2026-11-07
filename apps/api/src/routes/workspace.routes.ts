@@ -81,7 +81,20 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
     }
 
     const targetEmail = body.email.toLowerCase().trim();
-    const assignedRole = (body.role || 'editor') as WorkspaceRole;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail) || targetEmail.length > 255) {
+      return reply.status(400).send({ error: 'Valid email is required' });
+    }
+
+    // Only these roles may be granted through an invitation. 'owner' is never grantable.
+    const INVITABLE_ROLES = ['admin', 'editor', 'viewer'];
+    const requestedRole = body.role ?? 'editor';
+    if (typeof requestedRole !== 'string' || !INVITABLE_ROLES.includes(requestedRole)) {
+      return reply.status(400).send({ error: 'Role must be one of: admin, editor, viewer' });
+    }
+    if (requestedRole === 'admin' && member.role !== 'owner') {
+      return reply.status(403).send({ error: 'Only the workspace owner can invite administrators' });
+    }
+    const assignedRole = requestedRole as WorkspaceRole;
 
     // Check if target user is an existing registered user
     const targetUser = await repo.findUserByEmail(targetEmail);
@@ -90,6 +103,14 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
       const existingMember = await repo.findWorkspaceMember(id, targetUser.id);
       if (existingMember) {
         return reply.status(400).send({ error: 'User is already a member of this workspace' });
+      }
+    }
+
+    // A fresh invitation supersedes any still-pending one for the same address.
+    const existingInvites = await repo.findWorkspaceInvitations(id);
+    for (const inv of existingInvites) {
+      if (inv.email.toLowerCase() === targetEmail && !inv.acceptedAt && !inv.revokedAt && new Date(inv.expiresAt) > new Date()) {
+        await repo.revokeWorkspaceInvitation(id, inv.id);
       }
     }
 
@@ -195,8 +216,8 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
     const { id, userId } = request.params as { id: string; userId: string };
 
     const member = await repo.findWorkspaceMember(id, user.id);
-    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
-      return reply.status(403).send({ error: 'Owner or admin access required to remove workspace members' });
+    if (!member) {
+      return reply.status(403).send({ error: 'Not a member of this workspace' });
     }
 
     const targetMember = await repo.findWorkspaceMember(id, userId);
@@ -206,6 +227,16 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
 
     if (targetMember.role === 'owner') {
       return reply.status(400).send({ error: 'Cannot remove workspace owner' });
+    }
+
+    const isSelfLeave = userId === user.id;
+    if (!isSelfLeave) {
+      if (member.role !== 'owner' && member.role !== 'admin') {
+        return reply.status(403).send({ error: 'Owner or admin access required to remove workspace members' });
+      }
+      if (targetMember.role === 'admin' && member.role !== 'owner') {
+        return reply.status(403).send({ error: 'Only the workspace owner can remove administrators' });
+      }
     }
 
     await repo.removeWorkspaceMember(id, userId);

@@ -407,7 +407,13 @@ export class InMemoryRepository implements IRepository {
       throw new Error('This invitation was sent to a different email address');
     }
 
+    if (!['admin', 'editor', 'viewer'].includes(inv.role)) {
+      throw new Error('Invitation carries an invalid role');
+    }
+
     inv.acceptedAt = new Date().toISOString();
+    const existing = await this.findWorkspaceMember(inv.workspaceId, userId);
+    if (existing) return existing; // never change an existing member's role through an invitation
     return this.addWorkspaceMember(inv.workspaceId, userId, inv.role);
   }
 
