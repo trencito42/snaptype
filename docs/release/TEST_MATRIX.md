@@ -53,3 +53,7 @@ Not covered by that script: clipboard/selection commands, periodic (alarm) sync,
 PASS: folder cross-workspace references, OTP failure not locking out, sync full-replace/rollback/403 isolation, import/export round trip (nested folders, metadata, diacritics), invalid import items reported, membership permission matrix (invite roles, admin limits, self-leave, stale access, wrong-email and replay acceptance), command-browser examples all accepted by the parser.
 
 NOT TESTED / NOT AUDITED: account deletion with shared workspaces, Data Table concurrency and large data sets, revision restore, session rotation, folder tree at scale, logging of sensitive data.
+
+## CI evidence
+
+Run https://github.com/trencito42/snaptype/actions/runs/42420301897 (commit `0900288`) passed every step: typecheck, tests, API smoke on real MySQL (atomic invitation claim, tombstones, ownership transfer, export/import), builds, packaging, real-Chrome extension E2E, fresh Docker install, legacy-schema upgrade. Commits after it (dashboard header fix `bf8e77a`) have not been confirmed by CI yet.
