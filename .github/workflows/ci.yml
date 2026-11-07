@@ -81,6 +81,14 @@ jobs:
       - name: Test Persistent MySQL Volume Legacy Upgrade (real legacy fixture)
         run: bash scripts/ci/legacy-upgrade-test.sh
 
+      - name: Surface container logs on failure
+        if: failure()
+        run: |
+          for svc in mysql api; do
+            LOG=$(docker compose logs --no-color --tail 40 "$svc" 2>&1 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=docker logs $svc::$LOG"
+          done
+
       - name: Upload Extension Artifacts
         uses: actions/upload-artifact@v4
         with:
