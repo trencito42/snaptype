@@ -1,3 +1,4 @@
+import { enhanceSelect } from '../content/ui-controls.js';
 import { BrowserApi } from '@snaptype/browser-compat';
 import { Snippet } from '@snaptype/shared';
 import { renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
@@ -70,6 +71,7 @@ function showMainView(data: any) {
       workspaceSelect.appendChild(opt);
     }
 
+    enhanceSelect(workspaceSelect, 'Workspace');
     workspaceSelect.onchange = async () => {
       const targetWsId = workspaceSelect.value;
       headerStatus.textContent = 'Switching...';

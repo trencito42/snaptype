@@ -9,7 +9,7 @@
 .pill-dark { background: var(--ink); color: #fff; }
 .pill-dark:hover { background: #2a2c28; }
 .pill:focus-visible, .nav-link:focus-visible, .brand:focus-visible, .lp-chip:focus-visible, .lp-link:focus-visible,
-.lp-area:focus-visible, .lp-field input:focus-visible, .lp-field select:focus-visible, .footer-col button:focus-visible, .footer-col a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.lp-area:focus-visible, .lp-field input:focus-visible, .footer-col button:focus-visible, .footer-col a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 /* ───────── Floating header ───────── */
 .site-header { position: sticky; top: 0; z-index: 50; padding: 12px 12px 0; background: linear-gradient(var(--background) 55%, transparent); }
@@ -52,11 +52,11 @@
 
 /* Demo "device" */
 .lp-stage { position: relative; max-width: 860px; margin: 0 auto; padding: 8px 0 0; }
-.lp-device { position: relative; background: #d9dce1; border-radius: 34px; padding: 14px 14px 0; box-shadow: var(--shadow-soft); }
+.lp-device { position: relative; background: #d9dce1; border-radius: 34px; padding: 14px; box-shadow: var(--shadow-soft); }
 .lp-device-bar { display: flex; align-items: center; gap: 14px; background: var(--surface); border-radius: 22px 22px 0 0; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .lp-dots { display: inline-flex; gap: 6px; } .lp-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
 .lp-device-bar h2 { font-size: 15px; font-weight: 700; margin: 0; letter-spacing: -0.02em; line-height: 1.2; }
-.lp-device-body { background: var(--surface); padding: 16px 18px 12px; }
+.lp-device-body { background: var(--surface); padding: 16px 18px 14px; border-radius: 0 0 22px 22px; }
 .lp-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
 .lp-chip-label { font-size: 13px; color: var(--text-secondary); margin-right: 2px; }
 .lp-chip { min-height: 38px; padding: 0 16px; font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--accent-ink); background: var(--accent-light); border: 1px solid transparent; border-radius: var(--radius-pill); cursor: pointer; transition: background-color .15s; }
@@ -67,7 +67,7 @@
 .lp-float { position: absolute; z-index: 3; font-family: var(--font-mono); font-size: 14px; font-weight: 600; background: var(--surface); border-radius: 16px; padding: 10px 14px; box-shadow: var(--shadow-soft); display: none; }
 .lp-float-1 { top: -22px; left: -30px; transform: rotate(-6deg); }
 .lp-float-2 { top: 96px; right: -40px; transform: rotate(5deg); background: var(--accent); color: var(--accent-ink); }
-.lp-float-3 { bottom: 40px; left: -28px; transform: rotate(4deg); }
+.lp-float-3 { bottom: -18px; left: -28px; transform: rotate(4deg); }
 @media (min-width: 1000px) { .lp-float { display: block; } }
 
 .lp-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(19, 20, 18, .55); border-radius: 34px; z-index: 5; }
@@ -76,7 +76,7 @@
 .lp-dialog > p { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; }
 .lp-field { margin-bottom: 12px; }
 .lp-field label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
-.lp-field input, .lp-field select { width: 100%; min-height: 46px; font: inherit; font-size: 16px; padding: 0 14px; border: 1px solid transparent; border-radius: 14px; background: var(--surface-subtle); color: var(--ink); }
+.lp-field input { width: 100%; min-height: 46px; font: inherit; font-size: 16px; padding: 0 14px; border: 1px solid transparent; border-radius: 14px; background: var(--surface-subtle); color: var(--ink); }
 .lp-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
 /* Benefits */

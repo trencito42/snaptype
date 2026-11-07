@@ -248,3 +248,4 @@ body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-
 .popup-btn { border-radius: 999px !important; font-weight: 650; }
 .popup-btn-primary { background: var(--accent) !important; color: var(--accent-ink) !important; border-color: transparent !important; }
 .footer-btn { border-radius: 999px !important; }
+.workspace-bar .snaptype-dd { flex: 1; min-width: 0; } .workspace-bar { gap: 10px; }

@@ -7,6 +7,7 @@ import {
   faKeyboard, faCircleCheck, faPuzzlePiece
 } from '@fortawesome/free-solid-svg-icons';
 import { faChrome, faFirefoxBrowser } from '@fortawesome/free-brands-svg-icons';
+import { Select } from '../components/ui.js';
 import './landing.css';
 
 interface LandingPageProps {
@@ -176,10 +177,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth, onNavigate
                   <div className="lp-field" key={f.name}>
                     <label htmlFor={`f-${f.name}`}>{f.label}</label>
                     {f.type === 'dropdown' ? (
-                      <select id={`f-${f.name}`} value={String(values[f.name] ?? '')}
-                        onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}>
-                        {(f.options ?? []).map((o) => <option key={o}>{o}</option>)}
-                      </select>
+                      <Select id={`f-${f.name}`} ariaLabel={f.label} value={String(values[f.name] ?? '')}
+                        onChange={(v) => setValues({ ...values, [f.name]: v })}
+                        options={(f.options ?? []).map((o) => ({ value: o, label: o }))} />
                     ) : (
                       <input id={`f-${f.name}`} type="text" value={String(values[f.name] ?? '')}
                         onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}

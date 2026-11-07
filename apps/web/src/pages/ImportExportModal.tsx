@@ -1,3 +1,4 @@
+import { Select, Switch, FilePicker } from '../components/ui.js';
 import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState } from 'react';
 import { api } from '../api.js';
@@ -61,9 +62,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFile = (file: File) => {
 
     if (file.name.endsWith('.csv')) {
       setImportFormat('csv');
@@ -213,30 +212,32 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
                   Source Format
                 </label>
-                <select
-                  className="input"
+                <Select
+                  ariaLabel="Source format"
                   value={importFormat}
-                  onChange={(e) => setImportFormat(e.target.value as any)}
-                >
-                  <option value="snaptype_json">SnapType JSON</option>
-                  <option value="textblaze_json">Text Blaze Migration (JSON)</option>
-                  <option value="csv">RFC-4180 CSV (name, shortcut, plainContent, tags)</option>
-                </select>
+                  onChange={(v) => setImportFormat(v as any)}
+                  options={[
+                    { value: 'snaptype_json', label: 'SnapType JSON' },
+                    { value: 'textblaze_json', label: 'Text Blaze (JSON)' },
+                    { value: 'csv', label: 'CSV', hint: 'Columns: name, shortcut, plainContent, tags' }
+                  ]}
+                />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
                   Conflict Strategy
                 </label>
-                <select
-                  className="input"
+                <Select
+                  ariaLabel="Conflict strategy"
                   value={conflictStrategy}
-                  onChange={(e) => setConflictStrategy(e.target.value as any)}
-                >
-                  <option value="duplicate">Keep both (rename duplicate shortcut)</option>
-                  <option value="overwrite">Overwrite existing snippet</option>
-                  <option value="skip">Skip duplicates</option>
-                </select>
+                  onChange={(v) => setConflictStrategy(v as any)}
+                  options={[
+                    { value: 'duplicate', label: 'Keep both', hint: 'Renames the duplicate shortcut' },
+                    { value: 'overwrite', label: 'Overwrite existing' },
+                    { value: 'skip', label: 'Skip duplicates' }
+                  ]}
+                />
               </div>
             </div>
 
@@ -245,12 +246,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
                 <label style={{ fontSize: 12, fontWeight: 700 }}>
                   Upload File or Paste Data
                 </label>
-                <input
-                  type="file"
-                  accept=".csv,.json"
-                  onChange={handleFileUpload}
-                  style={{ fontSize: 12 }}
-                />
+                <FilePicker accept=".csv,.json" onFile={handleFile} label="Choose file" />
               </div>
               <textarea
                 className="input input-mono"

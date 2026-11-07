@@ -1,3 +1,4 @@
+import { Select, Switch, FilePicker } from '../components/ui.js';
 import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
@@ -566,21 +567,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <Plus size={13} />
               </button>
             </div>
-            <select
-              className="input"
-              style={{ fontSize: 13, padding: '4px 8px', width: '100%' }}
+            <Select
+              ariaLabel="Active workspace"
+              size="sm"
               value={activeWorkspaceId}
-              onChange={async (e) => {
-                const newWsId = e.target.value;
-                await changeActiveWorkspace(newWsId);
-              }}
-            >
-              {workspaces.map((w) => (
-                <option key={w.workspace.id} value={w.workspace.id}>
-                  {w.workspace.name} ({w.role})
-                </option>
-              ))}
-            </select>
+              onChange={async (newWsId) => { await changeActiveWorkspace(newWsId); }}
+              options={workspaces.map((w) => ({ value: w.workspace.id, label: `${w.workspace.name} (${w.role})` }))}
+            />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -927,16 +920,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
                       Folder
                     </label>
-                    <select
-                      className="input"
+                    <Select
+                      ariaLabel="Folder"
                       value={editFolderId || ''}
-                      onChange={(e) => updateEditorDraft({ folderId: e.target.value || null })}
-                    >
-                      <option value="">(No Folder)</option>
-                      {folders.map((f) => (
-                        <option key={f.id} value={f.id}>{f.name}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => updateEditorDraft({ folderId: v || null })}
+                      options={[{ value: '', label: 'No folder' }, ...folders.map((f) => ({ value: f.id, label: f.name }))]}
+                    />
                   </div>
                 </div>
 
@@ -1135,15 +1124,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           {field.label} ({field.type})
                         </label>
                         {field.type === 'dropdown' ? (
-                          <select
-                            className="input"
-                            value={previewVars[field.name] || ''}
-                            onChange={(e) => setPreviewVars({ ...previewVars, [field.name]: e.target.value })}
-                          >
-                            {(field.options || []).map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
+                          <Select
+                            ariaLabel={field.label || field.name}
+                            value={String(previewVars[field.name] || '')}
+                            onChange={(v) => setPreviewVars({ ...previewVars, [field.name]: v })}
+                            options={(field.options || []).map((opt) => ({ value: opt, label: opt }))}
+                            placeholder="Choose…"
+                          />
                         ) : field.type === 'paragraph' ? (
                           <textarea
                             className="input"

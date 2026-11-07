@@ -1,3 +1,4 @@
+import { Select, Switch, FilePicker } from '../components/ui.js';
 import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
@@ -297,19 +298,17 @@ export const DataTablesModal: React.FC<DataTablesModalProps> = ({
                         }}
                         required
                       />
-                      <select
-                        className="input"
-                        style={{ width: 100 }}
+                      <Select
+                        ariaLabel="Column type"
+                        style={{ width: 120 }}
                         value={col.type}
-                        onChange={(e) => {
+                        onChange={(v) => {
                           const updated = [...newColumns];
-                          updated[idx].type = e.target.value as any;
+                          updated[idx].type = v as any;
                           setNewColumns(updated);
                         }}
-                      >
-                        <option value="text">Text</option>
-                        <option value="number">Number</option>
-                      </select>
+                        options={[{ value: 'text', label: 'Text' }, { value: 'number', label: 'Number' }]}
+                      />
                       {newColumns.length > 1 && (
                         <button
                           type="button"

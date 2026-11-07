@@ -1,5 +1,6 @@
 import { ReverseShortcutMatcher, renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
 import { DomDetector, TextInserter, BrowserApi } from '@snaptype/browser-compat';
+import { createDropdown, createSwitch, createDatePicker } from './ui-controls.js';
 import { Snippet, UserPreferences, DEFAULT_PREFERENCES, DynamicFormField, DataTable, validateDashboardMessage } from '@snaptype/shared';
 
 declare const __SNAPTYPE_APP_URL__: string;
@@ -438,38 +439,13 @@ export class ContentEngine {
       let inputEl: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
       if (field.type === 'toggle') {
-        const checkboxWrapper = document.createElement('div');
-        checkboxWrapper.style.display = 'flex';
-        checkboxWrapper.style.alignItems = 'center';
-        checkboxWrapper.style.gap = '8px';
-
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.className = 'snaptype-checkbox';
-        chk.checked = Boolean(field.defaultValue);
-        inputEl = chk;
-
-        const checkLabel = document.createElement('span');
-        checkLabel.textContent = field.defaultValue ? 'Enabled' : 'Disabled';
-        chk.onchange = () => {
-          checkLabel.textContent = chk.checked ? 'Enabled' : 'Disabled';
-        };
-
-        checkboxWrapper.appendChild(chk);
-        checkboxWrapper.appendChild(checkLabel);
-        row.appendChild(checkboxWrapper);
+        const sw = createSwitch(Boolean(field.defaultValue), field.label || field.name);
+        inputEl = sw.checkbox;
+        row.appendChild(sw.root);
       } else if (field.type === 'dropdown') {
-        const select = document.createElement('select');
-        select.className = 'snaptype-input';
-        for (const opt of field.options || []) {
-          const optEl = document.createElement('option');
-          optEl.value = opt;
-          optEl.textContent = opt;
-          if (field.defaultValue === opt) optEl.selected = true;
-          select.appendChild(optEl);
-        }
-        inputEl = select;
-        row.appendChild(inputEl);
+        const dd = createDropdown(field.options || [], typeof field.defaultValue === 'string' ? field.defaultValue : undefined, field.label || field.name);
+        inputEl = dd.select;
+        row.appendChild(dd.root);
       } else if (field.type === 'paragraph') {
         const ta = document.createElement('textarea');
         ta.className = 'snaptype-input';
@@ -478,12 +454,18 @@ export class ContentEngine {
         inputEl = ta;
         row.appendChild(inputEl);
       } else {
-        const inp = document.createElement('input');
-        inp.className = 'snaptype-input';
-        inp.type = field.type === 'date' ? 'date' : 'text';
-        inp.value = String(field.defaultValue || '');
-        inputEl = inp;
-        row.appendChild(inputEl);
+        if (field.type === 'date') {
+          const dp = createDatePicker(String(field.defaultValue || ''), field.label || field.name);
+          inputEl = dp.input;
+          row.appendChild(dp.root);
+        } else {
+          const inp = document.createElement('input');
+          inp.className = 'snaptype-input';
+          inp.type = 'text';
+          inp.value = String(field.defaultValue || '');
+          inputEl = inp;
+          row.appendChild(inputEl);
+        }
       }
 
       const errSpan = document.createElement('div');

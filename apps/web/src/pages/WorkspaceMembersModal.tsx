@@ -1,3 +1,4 @@
+import { Select, Switch, FilePicker } from '../components/ui.js';
 import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
@@ -195,16 +196,17 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
                 onChange={(e) => setNewEmail(e.target.value)}
                 required
               />
-              <select
-                className="input"
-                style={{ width: 110, fontSize: 13 }}
+              <Select
+                ariaLabel="Role for the invited person"
+                style={{ width: 130 }}
                 value={newRole}
-                onChange={(e) => setNewRole(e.target.value as any)}
-              >
-                <option value="editor">Editor</option>
-                {isOwner && <option value="admin">Admin</option>}
-                <option value="viewer">Viewer</option>
-              </select>
+                onChange={(v) => setNewRole(v as any)}
+                options={[
+                  { value: 'editor', label: 'Editor' },
+                  ...(isOwner ? [{ value: 'admin', label: 'Admin' }] : []),
+                  { value: 'viewer', label: 'Viewer' }
+                ]}
+              />
               <button type="submit" className="btn btn-primary btn-sm" disabled={inviting}>
                 <UserPlus size={14} /> Invite
               </button>

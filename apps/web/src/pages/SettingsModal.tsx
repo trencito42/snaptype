@@ -1,3 +1,4 @@
+import { Select, Switch, FilePicker } from '../components/ui.js';
 import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
@@ -96,16 +97,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
             Shortcut Trigger Mode
           </label>
-          <select
-            className="input"
+          <Select
+            ariaLabel="Shortcut trigger mode"
             value={prefs.triggerMode}
-            onChange={(e) => setPrefs({ ...prefs, triggerMode: e.target.value as any })}
-          >
-            <option value="immediate">Immediate (expands as soon as shortcut is typed)</option>
-            <option value="space">After Space / Tab (expands after pressing spacebar)</option>
-            <option value="delimiter">Delimiter prefix only (e.g. /shortcut)</option>
-            <option value="manual">Manual only (via assistant hotkey or popup)</option>
-          </select>
+            onChange={(v) => setPrefs({ ...prefs, triggerMode: v as any })}
+            options={[
+              { value: 'immediate', label: 'Immediate', hint: 'Expands as soon as the shortcut is typed' },
+              { value: 'space', label: 'After space or tab', hint: 'Expands after you press space' },
+              { value: 'delimiter', label: 'Delimiter prefix only', hint: 'For example /shortcut' },
+              { value: 'manual', label: 'Manual only', hint: 'Via the assistant hotkey or the popup' }
+            ]}
+          />
         </div>
 
         {/* Assistant Shortcut */}
@@ -127,26 +129,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
         {/* Case sensitivity */}
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={prefs.caseSensitive}
-              onChange={(e) => setPrefs({ ...prefs, caseSensitive: e.target.checked })}
-            />
-            Case-sensitive shortcut matching
-          </label>
+          <Switch
+            checked={prefs.caseSensitive}
+            onChange={(v) => setPrefs({ ...prefs, caseSensitive: v })}
+            label="Case-sensitive shortcut matching"
+          />
         </div>
 
         {/* Sensitive field exclusion */}
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={prefs.disabledInSensitiveFields}
-              onChange={(e) => setPrefs({ ...prefs, disabledInSensitiveFields: e.target.checked })}
-            />
-            Strict security: Disable expansion in password and sensitive credit-card inputs
-          </label>
+          <Switch
+            checked={prefs.disabledInSensitiveFields}
+            onChange={(v) => setPrefs({ ...prefs, disabledInSensitiveFields: v })}
+            label="Skip password and payment fields"
+            description="Expansion is disabled in password and credit-card inputs."
+          />
         </div>
 
         {/* Excluded Domains */}

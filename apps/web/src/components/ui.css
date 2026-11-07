@@ -1,0 +1,35 @@
+/* Custom form controls: same look everywhere, no native widgets */
+.ui-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; padding: 0 14px; font: inherit; font-size: 14px; color: var(--ink); text-align: left; background: var(--surface-subtle); border: 1px solid transparent; border-radius: 14px; cursor: pointer; transition: background-color .15s, border-color .15s, box-shadow .15s; }
+.ui-select-sm { min-height: 36px; padding: 0 12px; font-size: 13px; border-radius: 12px; }
+.ui-select:hover:not(:disabled) { background: var(--surface-hover); }
+.ui-select:focus-visible, .ui-select.is-open { outline: none; background: var(--surface); border-color: var(--ink); box-shadow: 0 0 0 3px rgba(133, 246, 106, .45); }
+.ui-select:disabled { opacity: .55; cursor: not-allowed; }
+.ui-select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-placeholder { color: var(--text-muted); }
+.ui-select-caret { font-size: 12px; color: var(--text-secondary); transition: transform .15s; flex: none; }
+.ui-select.is-open .ui-select-caret { transform: rotate(180deg); }
+
+.ui-listbox { position: fixed; z-index: 2000; margin: 0; padding: 6px; list-style: none; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 12px 36px rgba(19, 20, 18, .16); }
+.ui-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; font-size: 14px; border-radius: 12px; cursor: pointer; color: var(--ink); }
+.ui-option.is-active { background: var(--surface-subtle); }
+.ui-option.is-selected { font-weight: 650; }
+.ui-option.is-selected svg { color: var(--accent-deep); }
+.ui-option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ui-option-text small { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
+
+.ui-switch-row { display: flex; align-items: flex-start; gap: 12px; }
+.ui-switch { position: relative; flex: none; width: 44px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: var(--border-strong); cursor: pointer; transition: background-color .18s; }
+.ui-switch.is-on { background: var(--accent-deep); }
+.ui-switch-knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .18s; }
+.ui-switch.is-on .ui-switch-knob { transform: translateX(18px); }
+.ui-switch:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.ui-switch:disabled { opacity: .5; cursor: not-allowed; }
+.ui-switch-text { display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.ui-switch-label { font-size: 14px; font-weight: 600; cursor: pointer; }
+.ui-switch-desc { font-size: 13px; color: var(--text-secondary); }
+
+.ui-file { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.ui-file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.ui-file-name { font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+
+@media (prefers-reduced-motion: reduce) { .ui-select-caret, .ui-switch, .ui-switch-knob { transition: none; } }

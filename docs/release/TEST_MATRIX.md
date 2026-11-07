@@ -25,7 +25,7 @@ Legend: PASS = observed result. NOT TESTED = no evidence, reason given. CI = ver
 
 ## Real Chrome extension (`scripts/e2e/chrome-extension-e2e.mjs`, Chrome 157, headless, throw-away in-memory API)
 
-All 36 checks PASS locally (2026-11-07):
+All 39 checks PASS locally (2026-11-07):
 service worker starts; OTP request and login through the extension's own messages; first sync = 5 starter snippets; expansion in textarea, single-line input and contenteditable; password field not expanded; server-side edit reaches the extension after SYNC_NOW without logout; dynamic form opens (no raw tags), Esc cancels and leaves the typed shortcut, submit inserts personalised text with the shortcut removed (this run found and fixed a caret bug); `{{date}}/{{time}}` render concrete values; stale-version write returns 409; `{{include}}`, `{{calc}}`, Data Table lookup and `{{#if}}` render correctly from synced data; workspace switch loads only the selected workspace (no leakage), team snippet expands while personal does not; wrong-account invitation acceptance refused, right account accepts; owner revokes membership and the extension drops the cached snippets and stops expanding; offline sync failure keeps cached snippets, expansion works offline, reconnect picks up changes; logout clears token and cached snippets.
 
 Not covered by that script: clipboard/selection commands, periodic (alarm) sync, assistant hotkey, context menu, popup UI, rich-text/React editors, iframes, shadow DOM, Edge as the host browser. All NOT TESTED in a browser.
