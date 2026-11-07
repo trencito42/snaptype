@@ -12,9 +12,14 @@ describe('Issue 5: Secure Dashboard-to-Extension Communication', () => {
       expect(isAllowedDashboardOrigin('http://127.0.0.1:5173')).toBe(true);
       expect(isAllowedDashboardOrigin('http://localhost:3000')).toBe(true);
       expect(isAllowedDashboardOrigin('http://127.0.0.1:3000')).toBe(true);
-      expect(isAllowedDashboardOrigin('https://snaptype.app')).toBe(true);
-      expect(isAllowedDashboardOrigin('https://app.snaptype.app')).toBe(true);
-      expect(isAllowedDashboardOrigin('https://custom.snaptype.app')).toBe(true);
+    });
+
+    it('with a production app URL configured, trusts only that origin (no hard-coded domains, no loopback)', () => {
+      const prod = 'https://app.example.test';
+      expect(isAllowedDashboardOrigin('https://app.example.test', prod)).toBe(true);
+      expect(isAllowedDashboardOrigin('https://snaptype.app', prod)).toBe(false);
+      expect(isAllowedDashboardOrigin('http://localhost:5173', prod)).toBe(false);
+      expect(isAllowedDashboardOrigin('https://snaptype.app')).toBe(false);
     });
 
     it('accepts explicitly configured custom app origins', () => {

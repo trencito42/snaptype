@@ -15,35 +15,29 @@ export function isAllowedDashboardOrigin(origin: string, configuredAppUrl?: stri
   try {
     const trimmedOrigin = origin.trim().replace(/\/+$/, '');
 
-    // Check against explicitly configured app URL if supplied
+    // A production build is configured with the owner's real dashboard URL: trust ONLY that origin.
+    // (No hard-coded product domains: trusting a domain the owner does not control would let any
+    // page there change the user's selected workspace.)
+    let configuredIsLoopback = true;
     if (configuredAppUrl) {
       try {
-        const configuredOrigin = new URL(configuredAppUrl).origin;
-        if (trimmedOrigin === configuredOrigin) return true;
+        const configured = new URL(configuredAppUrl);
+        if (trimmedOrigin === configured.origin) return true;
+        configuredIsLoopback = ['localhost', '127.0.0.1', '[::1]'].includes(configured.hostname);
       } catch {
-        // Ignore invalid configuredAppUrl string
+        // Invalid configuredAppUrl: fall back to development behaviour below
       }
     }
+    if (!configuredIsLoopback) return false;
 
-    // Default known development and production dashboard origins
-    const allowedExactOrigins = [
-      'https://snaptype.app',
-      'https://app.snaptype.app',
+    // Development: the local dashboard and API dev origins only.
+    const allowedDevOrigins = [
       'http://localhost:5173',
       'http://127.0.0.1:5173',
       'http://localhost:3000',
       'http://127.0.0.1:3000'
     ];
-
-    if (allowedExactOrigins.includes(trimmedOrigin)) {
-      return true;
-    }
-
-    const parsed = new URL(trimmedOrigin);
-    // Allow secure snaptype.app subdomains (e.g. staging.snaptype.app)
-    if (parsed.protocol === 'https:' && (parsed.hostname === 'snaptype.app' || parsed.hostname.endsWith('.snaptype.app'))) {
-      return true;
-    }
+    return allowedDevOrigins.includes(trimmedOrigin);
   } catch {
     return false;
   }
