@@ -7,6 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
+COPY infrastructure/ ./infrastructure/
 COPY tsconfig.json ./
 
 # Install all dependencies and build
@@ -26,6 +27,7 @@ ENV HOST=0.0.0.0
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/infrastructure ./infrastructure
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules

@@ -121,3 +121,4 @@ describe('Issue 5: Secure Dashboard-to-Extension Communication', () => {
     });
   });
 });
+

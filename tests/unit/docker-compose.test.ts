@@ -26,5 +26,15 @@ describe('ST-005 & Release Blocker: Docker Compose Configuration Validation', ()
     expect(envContent).toContain('MYSQL_ROOT_PASSWORD=');
     expect(envContent).toContain('JWT_SECRET=');
   });
+
+  it('apps/api/Dockerfile copies infrastructure/migrations into final runner image', () => {
+    const dockerfile = fs.readFileSync(path.resolve('apps/api/Dockerfile'), 'utf-8');
+
+    // Builder stage copies infrastructure
+    expect(dockerfile).toContain('COPY infrastructure/ ./infrastructure/');
+    // Runner stage copies infrastructure from builder
+    expect(dockerfile).toContain('COPY --from=builder /app/infrastructure ./infrastructure');
+    expect(dockerfile).toContain('ENV NODE_ENV=production');
+  });
 });
 

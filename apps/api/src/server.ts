@@ -128,6 +128,9 @@ if (process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.
       console.log(`📊 Health check: ${address}/health`);
       console.log(`============================================================\n`);
     });
+  }).catch((err) => {
+    console.error('[Fatal Server Startup Error]', err);
+    process.exit(1);
   });
 }
 

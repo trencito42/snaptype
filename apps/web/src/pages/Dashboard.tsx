@@ -337,6 +337,50 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  const handleReloadServerVersion = async () => {
+    if (!selectedSnippetId) return;
+
+    const confirmed = confirm(
+      'Are you sure you want to discard your local unsaved edits and reload the latest version from the server?'
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await api.getSnippet(selectedSnippetId);
+      const serverSnippet = res.snippet;
+
+      // Update snippet in list
+      setSnippets((prev) => prev.map((s) => (s.id === serverSnippet.id ? serverSnippet : s)));
+
+      // Explicitly replace dirty local draft with server version
+      const draft = draftManagerRef.current.resetDraftToServer(serverSnippet);
+
+      // Update all editor input fields
+      setEditName(draft.name);
+      setEditShortcut(draft.shortcut);
+      setEditFolderId(draft.folderId);
+      setEditPlainContent(draft.plainContent);
+      setEditDescription(draft.description);
+      setEditTags(draft.tags);
+      setEditIsFavorite(draft.isFavorite);
+      setEditIsEnabled(draft.isEnabled);
+
+      // Update dirty state and clear conflict banner
+      setSaveStatus('idle');
+      setErrorMessage(null);
+
+      // Update preview variables
+      const fields = extractFormFields(draft.plainContent);
+      const defaults: Record<string, any> = {};
+      for (const f of fields) {
+        defaults[f.name] = f.defaultValue || '';
+      }
+      setPreviewVars(defaults);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to reload snippet from server');
+    }
+  };
+
   const handleDeleteSnippet = async () => {
     if (!selectedSnippetId) return;
     if (!confirm('Are you sure you want to delete this snippet?')) return;
@@ -817,12 +861,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <button
                       className="btn btn-secondary btn-sm"
                       style={{ fontSize: 12, padding: '3px 10px' }}
-                      onClick={async () => {
-                        if (selectedSnippetId) {
-                          const res = await api.getSnippet(selectedSnippetId);
-                          selectSnippet(res.snippet);
-                        }
-                      }}
+                      onClick={handleReloadServerVersion}
                     >
                       Reload Server Version
                     </button>

@@ -138,4 +138,54 @@ describe('Release Blocker 3: Race-Safe Autosave State Machine', () => {
       expectedVersion: undefined // force overwrite omits version check
     }));
   });
+
+  it('reproduces an HTTP 409 conflict followed by Reload Server Version discarding dirty edits', async () => {
+    const manager = new DraftManager();
+    manager.initDraft(baseSnippet);
+
+    // User makes uncommitted local changes
+    manager.updateDraft('snip-100', {
+      name: 'Local Changed Name',
+      plainContent: 'Local uncommitted content that conflicts'
+    });
+
+    // Attempting to save encounters an HTTP 409 conflict
+    const conflictErr = new Error('Conflict: Modified on another device or tab');
+    (conflictErr as any).status = 409;
+    const apiSaveMock = vi.fn().mockRejectedValue(conflictErr);
+
+    const res = await manager.save('snip-100', baseSnippet, apiSaveMock);
+    expect(res.success).toBe(false);
+    expect(res.conflict).toBe(true);
+
+    // Draft is kept dirty during conflict
+    const conflictDraft = manager.getDraft('snip-100');
+    expect(conflictDraft?.isDirty).toBe(true);
+    expect(conflictDraft?.plainContent).toBe('Local uncommitted content that conflicts');
+
+    // Server has a newer version updated by another device/tab
+    const serverSnippetVersion2: Snippet = {
+      ...baseSnippet,
+      name: 'Server Updated Name',
+      plainContent: 'Server updated content v2',
+      version: 2,
+      updatedAt: new Date().toISOString()
+    };
+
+    // User chooses "Reload Server Version"
+    const reloadedDraft = manager.resetDraftToServer(serverSnippetVersion2);
+
+    // Verify local dirty edits are discarded and server state is cleanly adopted
+    expect(reloadedDraft.name).toBe('Server Updated Name');
+    expect(reloadedDraft.plainContent).toBe('Server updated content v2');
+    expect(reloadedDraft.baseVersion).toBe(2);
+    expect(reloadedDraft.isDirty).toBe(false);
+    expect(manager.hasDirtyDrafts()).toBe(false);
+
+    // Subsequent initDraft returns clean server version
+    const subsequent = manager.initDraft(serverSnippetVersion2);
+    expect(subsequent.isDirty).toBe(false);
+    expect(subsequent.plainContent).toBe('Server updated content v2');
+  });
 });
+

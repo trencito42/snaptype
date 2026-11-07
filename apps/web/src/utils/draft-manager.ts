@@ -83,6 +83,13 @@ export class DraftManager {
     return clean;
   }
 
+  /**
+   * Explicitly replaces any local dirty draft with the server version (ST-037 / Defect 2)
+   */
+  public resetDraftToServer(snippet: Snippet): SnippetDraft {
+    return this.discardDraft(snippet);
+  }
+
   public hasDirtyDrafts(): boolean {
     for (const draft of this.drafts.values()) {
       if (draft.isDirty) return true;
@@ -203,3 +210,4 @@ export class DraftManager {
     return savePromise;
   }
 }
+

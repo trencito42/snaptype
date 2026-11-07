@@ -10,12 +10,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function findMigrationsDir(): string | null {
+  if (process.env.MIGRATIONS_DIR) {
+    const candidate = path.resolve(process.env.MIGRATIONS_DIR);
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      return candidate;
+    }
+    return null;
+  }
+
   const possiblePaths = [
-    path.resolve(process.cwd(), '../../infrastructure/migrations'),
     path.resolve(process.cwd(), 'infrastructure/migrations'),
+    path.resolve(process.cwd(), '../../infrastructure/migrations'),
     path.resolve(__dirname, '../../../../infrastructure/migrations'),
     path.resolve(__dirname, '../../../infrastructure/migrations'),
     path.resolve(__dirname, '../../infrastructure/migrations'),
+    path.resolve(__dirname, '../infrastructure/migrations'),
+    '/app/infrastructure/migrations'
   ];
 
   for (const candidate of possiblePaths) {
@@ -139,14 +149,30 @@ export async function runMigrations(databaseUrl?: string): Promise<string[]> {
 
     // 3. Discover migration directory and files
     const migrationsDir = findMigrationsDir();
+    const isProduction = process.env.NODE_ENV === 'production';
     if (!migrationsDir) {
-      console.warn('[Migration] Migration SQL directory not found.');
+      const errMsg = '[Migration Fatal] Migration SQL directory not found.';
+      if (isProduction) {
+        console.error(errMsg);
+        throw new Error(errMsg);
+      }
+      console.warn(errMsg);
       return [];
     }
 
     const files = fs.readdirSync(migrationsDir)
       .filter((file) => file.endsWith('.sql'))
       .sort();
+
+    if (files.length === 0) {
+      const errMsg = `[Migration Fatal] No migration SQL files found in ${migrationsDir}.`;
+      if (isProduction) {
+        console.error(errMsg);
+        throw new Error(errMsg);
+      }
+      console.warn(errMsg);
+      return [];
+    }
 
     console.log(`[Migration] Found ${files.length} migration file(s) in ${migrationsDir}`);
 
