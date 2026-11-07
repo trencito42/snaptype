@@ -165,7 +165,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
         padding: 28,
         position: 'relative'
       }}>
-        <button
+        <button aria-label="Close"
           onClick={onClose}
           style={{ position: 'absolute', top: 18, right: 18, background: 'none', border: 'none', cursor: 'pointer' }}
         >

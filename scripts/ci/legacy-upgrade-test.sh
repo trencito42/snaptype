@@ -62,6 +62,19 @@ docker compose restart api
 curl --fail --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:3000/health
 [ "$(mysql_q -e "SELECT COUNT(*) FROM snippets WHERE id='s-legacy-1'")" = "1" ] || { echo "FAIL: data lost on restart"; exit 1; }
 
+# Interrupted-upgrade recovery: recreate a half-applied state (as if the process died mid-migration)
+# and verify that the next start repairs it without data loss.
+mysql_q -e "ALTER TABLE workspace_invitations ADD COLUMN token VARCHAR(64) NULL AFTER role; UPDATE workspace_invitations SET token='plaintextsecrettoken999999999999999999' WHERE id='inv-legacy-99'; ALTER TABLE workspace_invitations MODIFY token_hash VARCHAR(128) NULL; UPDATE workspace_invitations SET token_hash=NULL WHERE id='inv-legacy-99'; ALTER TABLE folders DROP COLUMN revision; DELETE FROM schema_migrations WHERE id IN ('0002_schema_upgrade.sql','0003_upgrade_invitations_token_hash.sql');"
+docker compose restart api
+curl --fail --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:3000/health   || { docker compose logs api; exit 1; }
+RE_HASH=$(mysql_q -e "SELECT token_hash FROM workspace_invitations WHERE id='inv-legacy-99'")
+[ "$RE_HASH" = "$EXPECTED" ] || { echo "FAIL: interrupted upgrade not repaired (token_hash='$RE_HASH')"; exit 1; }
+[ "$(mysql_q -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${MYSQL_DATABASE}' AND TABLE_NAME='workspace_invitations' AND COLUMN_NAME='token'")" = "0" ] || { echo "FAIL: token column still present after recovery"; exit 1; }
+[ "$(mysql_q -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${MYSQL_DATABASE}' AND TABLE_NAME='folders' AND COLUMN_NAME='revision'")" = "1" ] || { echo "FAIL: folders.revision not restored"; exit 1; }
+[ "$(mysql_q -e "SELECT COUNT(*) FROM schema_migrations")" -ge 3 ] || { echo "FAIL: migrations not re-recorded"; exit 1; }
+[ "$(mysql_q -e "SELECT COUNT(*) FROM snippets WHERE id='s-legacy-1'")" = "1" ] || { echo "FAIL: data lost during recovery"; exit 1; }
+echo "PASS: interrupted upgrade is repaired on the next start"
+
 # Production must refuse to start when migration files are missing.
 if docker compose run --rm --no-deps -e MIGRATIONS_DIR=/tmp/empty_migrations api node apps/api/dist/server.js; then
   echo "FAIL: API started without migrations in production"; exit 1

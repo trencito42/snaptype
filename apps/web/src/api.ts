@@ -27,8 +27,9 @@ class ApiClient {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    // Fastify rejects a JSON content-type on a request without a body (e.g. POST /duplicate, DELETE).
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(options.body !== undefined && options.body !== null ? { 'Content-Type': 'application/json' } : {}),
       ...(options.headers as Record<string, string> || {})
     };
 

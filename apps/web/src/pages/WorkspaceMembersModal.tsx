@@ -169,7 +169,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
         padding: 24,
         position: 'relative'
       }}>
-        <button
+        <button aria-label="Close"
           onClick={onClose}
           style={{ position: 'absolute', top: 18, right: 18, background: 'none', border: 'none', cursor: 'pointer' }}
         >

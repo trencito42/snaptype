@@ -175,7 +175,7 @@ export const DataTablesModal: React.FC<DataTablesModalProps> = ({
             <Table size={18} style={{ color: 'var(--accent-ink)' }} />
             <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Data Tables (Lookup Tables)</h3>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
           >

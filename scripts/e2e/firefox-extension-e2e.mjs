@@ -27,6 +27,9 @@ const killTree = (p) => { try { if (process.platform === 'win32' && p.pid) spawn
 let driver; let pageSrv;
 const cleanup = async () => { try { await driver?.quit(); } catch {} procs.forEach(killTree); try { pageSrv?.close(); } catch {} try { fs.rmSync(path.join(ROOT, '.e2e-tmp'), { recursive: true, force: true }); } catch {} };
 
+// Needed so Selenium may read the add-on's internal UUID from the chrome context
+process.env.MOZ_REMOTE_ALLOW_SYSTEM_ACCESS = '1';
+
 try { await fetch(`http://127.0.0.1:${API_PORT}/health`); console.error('API port busy'); process.exit(2); } catch {}
 
 // Build + zip the Firefox package against the throw-away API

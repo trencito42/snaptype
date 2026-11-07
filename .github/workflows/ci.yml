@@ -62,6 +62,9 @@ jobs:
       - name: Real Chrome extension end-to-end test (throw-away API, headless Chrome)
         run: node scripts/e2e/chrome-extension-e2e.mjs /usr/bin/google-chrome
 
+      - name: Dashboard UI end-to-end test (real Chrome driving the real UI)
+        run: node scripts/e2e/dashboard-e2e.mjs /usr/bin/google-chrome
+
       - name: Real Firefox extension end-to-end test (same scenario, Selenium + geckodriver)
         run: node scripts/e2e/firefox-extension-e2e.mjs
 

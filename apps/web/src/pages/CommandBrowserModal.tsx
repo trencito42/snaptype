@@ -163,7 +163,7 @@ export const CommandBrowserModal: React.FC<CommandBrowserModalProps> = ({
             <Sparkles size={18} style={{ color: 'var(--accent-hover)' }} />
             <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Command Browser & Dynamic Tags</h3>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
           >
