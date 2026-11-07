@@ -83,8 +83,8 @@ jobs:
 
       - name: Test Real Docker Deployment & Healthcheck (Fresh Installation)
         run: |
-          docker compose up -d --build
-          curl --fail --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:3000/health || (docker compose logs && exit 1)
+          docker compose up -d --build 2>&1 | tee /tmp/up.log
+          curl --fail --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:3000/health
           docker compose down -v
 
       - name: Test Persistent MySQL Volume Legacy Upgrade (real legacy fixture)
@@ -93,6 +93,12 @@ jobs:
       - name: Surface container logs on failure
         if: failure()
         run: |
+          UP=$(tail -15 /tmp/up.log 2>/dev/null | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=compose up output::$UP"
+          PS=$(docker compose ps -a 2>&1 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=compose ps::$PS"
+          HC=$(docker inspect --format '{{json .State.Health}}' snaptype-mysql 2>&1 | sed 's/%/%25/g' | cut -c1-1500)
+          echo "::error title=mysql health::$HC"
           for svc in api mysql; do
             N=40; [ "$svc" = mysql ] && N=6
             LOG=$(docker compose logs --no-color --tail "$N" "$svc" 2>&1 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')

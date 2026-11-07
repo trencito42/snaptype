@@ -129,6 +129,8 @@ export interface SyncResponse {
   deletedFolderIds: string[];
   preferences: UserPreferences;
   tables?: DataTable[];
+  /** True when `snippets`/`folders` are the complete workspace state and the client must REPLACE, not merge. */
+  fullSync?: boolean;
 }
 
 export interface DynamicFormField {

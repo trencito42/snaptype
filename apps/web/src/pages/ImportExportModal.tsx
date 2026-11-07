@@ -267,8 +267,16 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
             )}
 
             {result && (
-              <div style={{ padding: '10px 14px', background: 'var(--accent-light)', color: '#166534', fontSize: 13, marginBottom: 14, borderRadius: 6 }}>
-                Successfully imported {result.importedCount} snippets! ({result.skippedCount} skipped)
+              <div role="status" style={{ padding: '10px 14px', background: result.failedCount > 0 ? '#fff7e6' : 'var(--accent-light)', color: result.failedCount > 0 ? '#7a4b00' : '#166534', fontSize: 13, marginBottom: 14, borderRadius: 6 }}>
+                Imported {result.importedCount} snippet(s). {result.skippedCount} skipped, {result.failedCount ?? 0} failed.
+                {result.failedCount > 0 && (
+                  <ul style={{ marginTop: 6, paddingLeft: 18, fontSize: 12 }}>
+                    {result.failed.slice(0, 20).map((f: { shortcut: string; reason: string }, i: number) => (
+                      <li key={i}><code>{f.shortcut}</code>: {f.reason}</li>
+                    ))}
+                    {result.failed.length > 20 && <li>…and {result.failed.length - 20} more</li>}
+                  </ul>
+                )}
                 {result.warnings?.length > 0 && (
                   <div style={{ marginTop: 6, fontSize: 12 }}>
                     <strong>Warnings:</strong> {result.warnings.join(', ')}

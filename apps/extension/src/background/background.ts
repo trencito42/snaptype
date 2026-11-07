@@ -142,10 +142,12 @@ async function syncWithServer(): Promise<boolean> {
     if (state.workspaces.length === 0) {
       await fetchWorkspaces();
     }
+    const requestedWorkspaceId = state.currentWorkspaceId;
+    const requestedRevision = state.currentRevision;
     const params = new URLSearchParams();
-    params.set('lastRevision', String(state.currentRevision));
-    if (state.currentWorkspaceId) {
-      params.set('workspaceId', state.currentWorkspaceId);
+    params.set('lastRevision', String(requestedRevision));
+    if (requestedWorkspaceId) {
+      params.set('workspaceId', requestedWorkspaceId);
     }
 
     const res = await fetch(`${API_BASE}/sync?${params.toString()}`, {
@@ -160,6 +162,11 @@ async function syncWithServer(): Promise<boolean> {
       await handleLogout();
       return false;
     }
+
+    // A workspace switch / logout while this request was in flight makes the response stale:
+    // applying it would mix another workspace's data into the current state.
+    const isStale = () => state.token === null || state.currentWorkspaceId !== requestedWorkspaceId;
+    if (isStale()) return false;
 
     if (res.status === 403) {
       // Access revoked or removed from workspace (ST-006 / Blocker 6)
@@ -181,6 +188,7 @@ async function syncWithServer(): Promise<boolean> {
     if (!res.ok) return false;
 
     const data: SyncResponse = await res.json();
+    if (isStale()) return false;
     state.currentRevision = data.currentRevision;
     if (data.preferences) {
       state.preferences = data.preferences;
@@ -191,18 +199,19 @@ async function syncWithServer(): Promise<boolean> {
       state.tables = data.tables;
     }
 
-    // If first load or full sync:
-    if (state.snippets.length === 0 || data.deletedSnippetIds.length > 0) {
+    // Defense in depth: never accept snippets belonging to a different workspace.
+    const incoming = requestedWorkspaceId
+      ? data.snippets.filter((s) => s.workspaceId === requestedWorkspaceId)
+      : data.snippets;
+
+    if (data.fullSync === true || requestedRevision === 0) {
+      // Complete state: REPLACE so snippets deleted/removed server-side cannot linger locally.
+      state.snippets = incoming;
+    } else {
       const map = new Map<string, Snippet>();
       for (const s of state.snippets) map.set(s.id, s);
       for (const id of data.deletedSnippetIds) map.delete(id);
-      for (const s of data.snippets) map.set(s.id, s);
-      state.snippets = Array.from(map.values());
-    } else {
-      // Append / update
-      const map = new Map<string, Snippet>();
-      for (const s of state.snippets) map.set(s.id, s);
-      for (const s of data.snippets) map.set(s.id, s);
+      for (const s of incoming) map.set(s.id, s);
       state.snippets = Array.from(map.values());
     }
 

@@ -1,5 +1,5 @@
 import { IRepository } from '../db/repository.js';
-import { CreateSnippetInput, UpdateSnippetInput, ImportSnippetsInput, Snippet, Folder, WorkspaceRole } from '@snaptype/shared';
+import { CreateSnippetSchema, CreateSnippetInput, UpdateSnippetInput, ImportSnippetsInput, Snippet, Folder, WorkspaceRole } from '@snaptype/shared';
 
 export interface SnippetAuthorizer {
   checkAccess(workspaceId: string, userId: string, requiredRole?: WorkspaceRole): Promise<boolean>;
@@ -180,115 +180,130 @@ export class SnippetService {
 
     const created: Snippet[] = [];
     const skipped: string[] = [];
+    const failed: { shortcut: string; reason: string }[] = [];
     const warnings: string[] = [];
 
-    // Preload folders in workspace
+    // Folders are keyed by (parent, name) so "A/Support" and "B/Support" stay distinct.
+    const folderKey = (parentId: string | null, name: string) => `${parentId ?? ''}|${name.toLowerCase().trim()}`;
     const existingFolders = await this.repo.findFolders(workspaceId);
     const folderMap = new Map<string, Folder>();
-    for (const f of existingFolders) {
-      folderMap.set(f.name.toLowerCase().trim(), f);
-    }
+    for (const f of existingFolders) folderMap.set(folderKey(f.parentId ?? null, f.name), f);
 
-    // Map old folder IDs to new workspace folder IDs (ST-033)
+    // Map exported folder ids to folders in the TARGET workspace (ST-033).
     const folderIdMap = new Map<string, string>();
-    if (input.folders && Array.isArray(input.folders)) {
-      for (const f of input.folders) {
-        if (!f || !f.name) continue;
-        const normName = f.name.toLowerCase().trim();
-        let targetFolder = folderMap.get(normName);
-        if (!targetFolder) {
-          const mappedParentId = f.parentId ? (folderIdMap.get(f.parentId) || null) : null;
-          targetFolder = await this.repo.createFolder(workspaceId, {
-            name: f.name.trim(),
-            parentId: mappedParentId,
+    const pending = (input.folders ?? []).filter((f) => f && f.name && f.name.trim());
+    // Parents may appear after children in a file: resolve in passes until no progress.
+    const knownIds = new Set(pending.map((f) => f.id).filter((id): id is string => Boolean(id)));
+    let remaining = pending;
+    while (remaining.length > 0) {
+      const next: typeof remaining = [];
+      for (const f of remaining) {
+        const parentExported = f.parentId && knownIds.has(f.parentId) ? f.parentId : null;
+        if (parentExported && !folderIdMap.has(parentExported)) { next.push(f); continue; }
+        const parentId = parentExported ? folderIdMap.get(parentExported)! : null;
+        const key = folderKey(parentId, f.name);
+        let target = folderMap.get(key);
+        if (!target) {
+          target = await this.repo.createFolder(workspaceId, {
+            name: f.name.trim().slice(0, 100),
+            parentId,
             color: f.color || null,
-            icon: f.icon || null
+            icon: f.icon || null,
+            isFavorite: Boolean(f.isFavorite),
+            sortOrder: f.sortOrder ?? 0
           });
-          folderMap.set(normName, targetFolder);
+          folderMap.set(key, target);
         }
-        if (f.id) {
-          folderIdMap.set(f.id, targetFolder.id);
-        }
+        if (f.id) folderIdMap.set(f.id, target.id);
       }
+      if (next.length === remaining.length) {
+        // Cycle inside the file: attach the rest at root rather than lose them.
+        for (const f of next) {
+          warnings.push(`Folder "${f.name}" has an unresolved parent; imported at root.`);
+          const key = folderKey(null, f.name);
+          let target = folderMap.get(key);
+          if (!target) {
+            target = await this.repo.createFolder(workspaceId, { name: f.name.trim().slice(0, 100) });
+            folderMap.set(key, target);
+          }
+          if (f.id) folderIdMap.set(f.id, target.id);
+        }
+        break;
+      }
+      remaining = next;
     }
 
     for (const item of input.snippets) {
-      let shortcut = item.shortcut.trim();
-      if (!shortcut) continue;
-
-      let folderId: string | null = null;
-      if (item.folderId && folderIdMap.has(item.folderId)) {
-        folderId = folderIdMap.get(item.folderId)!;
-      } else if (item.folderName) {
-        const normFolderName = item.folderName.toLowerCase().trim();
-        if (folderMap.has(normFolderName)) {
-          folderId = folderMap.get(normFolderName)!.id;
-        } else {
-          // Create new folder
-          const newFolder = await this.repo.createFolder(workspaceId, { name: item.folderName.trim() });
-          folderMap.set(normFolderName, newFolder);
-          folderId = newFolder.id;
+      const label = (item.shortcut || '').trim() || '(empty shortcut)';
+      try {
+        let content = item.plainContent;
+        if (input.format === 'textblaze_json') {
+          const conversion = this.convertFromTextBlaze(content);
+          content = conversion.converted;
+          if (conversion.warnings.length > 0) warnings.push(`[${item.name}] ` + conversion.warnings.join('; '));
         }
-      }
 
-      // Convert Text Blaze format if needed
-      let content = item.plainContent;
-      if (input.format === 'textblaze_json') {
-        const conversion = this.convertFromTextBlaze(content);
-        content = conversion.converted;
-        if (conversion.warnings.length > 0) {
-          warnings.push(`[${item.name}] ` + conversion.warnings.join('; '));
+        let shortcut = item.shortcut.trim();
+        let folderId: string | null = null;
+        if (item.folderId && folderIdMap.has(item.folderId)) {
+          folderId = folderIdMap.get(item.folderId)!;
+        } else if (item.folderName && item.folderName.trim()) {
+          const key = folderKey(null, item.folderName);
+          let f = folderMap.get(key);
+          if (!f) {
+            f = await this.repo.createFolder(workspaceId, { name: item.folderName.trim().slice(0, 100) });
+            folderMap.set(key, f);
+          }
+          folderId = f.id;
         }
-      }
 
-      // Handle shortcut conflict
-      const existing = await this.repo.findSnippetByShortcut(workspaceId, shortcut);
-      if (existing) {
-        if (input.conflictStrategy === 'skip') {
-          skipped.push(shortcut);
+        // Same validation as the normal create endpoint (shortcut charset/length, field limits).
+        const valid = CreateSnippetSchema.safeParse({
+          name: item.name, shortcut, plainContent: content, richContent: item.richContent ?? null,
+          description: item.description ?? null, tags: item.tags ?? [],
+          isFavorite: item.isFavorite ?? false, isEnabled: item.isEnabled ?? true,
+          siteRestrictions: item.siteRestrictions ?? null
+        });
+        if (!valid.success) {
+          failed.push({ shortcut: label, reason: valid.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') });
           continue;
         }
-        if (input.conflictStrategy === 'overwrite') {
-          const updated = await this.repo.updateSnippet(existing.id, {
-            name: item.name,
-            plainContent: content,
-            richContent: item.richContent || null,
-            description: item.description || null,
-            tags: item.tags || [],
-            folderId
-          }, userId);
-          created.push(updated);
-          continue;
-        }
-        if (input.conflictStrategy === 'duplicate') {
+        const data = valid.data;
+
+        const existing = await this.repo.findSnippetByShortcut(workspaceId, shortcut);
+        if (existing) {
+          if (input.conflictStrategy === 'skip') { skipped.push(shortcut); continue; }
+          if (input.conflictStrategy === 'overwrite') {
+            const updated = await this.repo.updateSnippet(existing.id, {
+              name: data.name, plainContent: data.plainContent, richContent: data.richContent ?? null,
+              description: data.description ?? null, tags: data.tags, folderId,
+              isFavorite: data.isFavorite, isEnabled: data.isEnabled, siteRestrictions: data.siteRestrictions ?? null
+            }, userId);
+            created.push(updated);
+            continue;
+          }
           let suffix = 1;
           let candidate = `${shortcut}_${suffix}`;
-          while (await this.repo.findSnippetByShortcut(workspaceId, candidate)) {
-            candidate = `${shortcut}_${++suffix}`;
-          }
-          shortcut = candidate;
+          while (await this.repo.findSnippetByShortcut(workspaceId, candidate)) candidate = `${shortcut}_${++suffix}`;
+          shortcut = candidate.slice(0, 64);
         }
+
+        created.push(await this.repo.createSnippet(workspaceId, {
+          name: data.name, shortcut, plainContent: data.plainContent, richContent: data.richContent ?? null,
+          description: data.description ?? null, tags: data.tags, folderId,
+          isFavorite: data.isFavorite, isEnabled: data.isEnabled, siteRestrictions: data.siteRestrictions ?? null
+        }, userId));
+      } catch (err: any) {
+        failed.push({ shortcut: label, reason: err?.message || 'Unexpected error' });
       }
-
-      const snippet = await this.repo.createSnippet(workspaceId, {
-        name: item.name,
-        shortcut,
-        plainContent: content,
-        richContent: item.richContent || null,
-        description: item.description || null,
-        tags: item.tags || [],
-        folderId,
-        isFavorite: false,
-        isEnabled: true
-      }, userId);
-
-      created.push(snippet);
     }
 
     return {
       importedCount: created.length,
       skippedCount: skipped.length,
       skipped,
+      failedCount: failed.length,
+      failed,
       warnings,
       created
     };

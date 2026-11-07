@@ -14,7 +14,8 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
 
     const user = request.user!;
     const query = request.query as { lastRevision?: string; workspaceId?: string; includeTables?: string };
-    const lastRevision = parseInt(query.lastRevision || '0', 10);
+    const requestedRevision = parseInt(query.lastRevision || '0', 10);
+    let lastRevision = Number.isFinite(requestedRevision) && requestedRevision > 0 ? requestedRevision : 0;
 
     let workspaceId = query.workspaceId;
     if (!workspaceId) {
@@ -38,6 +39,12 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
     if (!member) {
       return reply.status(403).send({ error: 'Access denied to workspace' });
     }
+
+    // A client revision AHEAD of the server means the server state was rolled back/restored (or the
+    // client cache is corrupt). Incremental data would be meaningless, so force a full replace.
+    const serverRevision = await repo.getWorkspaceRevision(workspaceId);
+    if (lastRevision > serverRevision) lastRevision = 0;
+    const fullSync = lastRevision === 0;
 
     const syncData = await repo.getSyncData(workspaceId, lastRevision);
     const preferences = await repo.getUserPreferences(user.id);
@@ -65,6 +72,7 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
       folders: syncData.folders,
       deletedFolderIds: syncData.deletedFolderIds,
       preferences,
+      fullSync,
       ...(tables !== undefined ? { tables } : {})
     };
 

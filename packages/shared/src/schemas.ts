@@ -67,13 +67,29 @@ export const ImportSnippetItemSchema = z.object({
   folderId: z.string().optional(),
   folderName: z.string().trim().optional(),
   description: z.string().nullable().optional(),
-  tags: z.array(z.string()).optional()
+  tags: z.array(z.string()).optional(),
+  isFavorite: z.boolean().optional(),
+  isEnabled: z.boolean().optional(),
+  siteRestrictions: z.object({
+    mode: z.enum(['allow', 'block']),
+    domains: z.array(z.string())
+  }).nullable().optional()
+});
+
+export const ImportFolderItemSchema = z.object({
+  id: z.string().optional(),
+  parentId: z.string().nullable().optional(),
+  name: z.string(),
+  color: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  isFavorite: z.boolean().optional(),
+  sortOrder: z.number().int().optional()
 });
 
 export const ImportSnippetsSchema = z.object({
   workspaceId: z.string().uuid().optional(),
-  snippets: z.array(ImportSnippetItemSchema),
-  folders: z.array(z.any()).optional(),
+  snippets: z.array(ImportSnippetItemSchema).max(10000),
+  folders: z.array(ImportFolderItemSchema).max(5000).optional(),
   format: z.enum(['snaptype_json', 'textblaze_json', 'csv']).default('snaptype_json'),
   conflictStrategy: z.enum(['skip', 'overwrite', 'duplicate']).default('duplicate')
 });
