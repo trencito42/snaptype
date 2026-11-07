@@ -230,6 +230,13 @@ class ApiClient {
     );
   }
 
+  public async transferWorkspaceOwnership(workspaceId: string, userId: string) {
+    return this.request<{ success: boolean; message: string }>(`/workspaces/${workspaceId}/transfer-ownership`, {
+      method: 'POST',
+      body: JSON.stringify({ userId })
+    });
+  }
+
   public async removeWorkspaceMember(workspaceId: string, userId: string) {
     return this.request<{ success: boolean }>(`/workspaces/${workspaceId}/members/${userId}`, {
       method: 'DELETE'

@@ -23,7 +23,7 @@ Priorities: P0 data/security, P1 functional, P2 polish. Status: OPEN / FIXED-UNV
 | RB-017 | P1 | OPEN | Rate limiter/IP metadata saw only the proxy IP behind nginx | `server.ts` now honours `TRUST_PROXY` (compose sets true) | Verify behind real proxy |
 | RB-018 | P2 | OPEN | Dashboard uses 13 native `alert()`/`confirm()` dialogs | `Dashboard.tsx` | Replace with in-app dialogs |
 | RB-019 | P1 | FIXED | Dashboard origin allow-list for the extension bridge hard-codes `snaptype.app` domains | `packages/shared/src/security.ts` | Derive from configured `SNAPTYPE_APP_URL` |
-| RB-020 | P1 | OPEN | No role-change endpoint for existing members; no revision-restore API check performed; account deletion with shared workspaces, Data Table concurrency, folder tree at scale not re-audited | see TEST_MATRIX | Audit + tests |
+| RB-020 | P1 | PARTIAL | Added ownership transfer (API, repos, UI) so an owner can leave shared workspaces; account-deletion path tested. Still open: role change for existing members, revision-restore check, Data Table concurrency, folder tree at scale | see TEST_MATRIX | Audit + tests |
 | RB-021 | P1 | FIXED | Dynamic form in input/textarea restored a stale DOM Range instead of the control's caret, leaving the typed shortcut behind | `content.ts` (`isTextControl`) | Found by real-Chrome E2E; now passing |
 | RB-022 | P1 | FIXED | MySQL readiness (script + compose healthcheck) was satisfied by the temporary init server, causing intermittent CI/start failures | `legacy-upgrade-test.sh`, `docker-compose.yml` use TCP | Confirm on CI |
 | RB-023 | P2 | FIXED | Homepage muted text failed contrast (3.1:1) | `--text-muted` darkened | Lighthouse a11y 100 |

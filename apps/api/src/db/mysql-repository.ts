@@ -395,6 +395,24 @@ export class MySQLRepository implements IRepository {
       .where(and(eq(schema.workspaceInvitationsTable.id, id), eq(schema.workspaceInvitationsTable.workspaceId, workspaceId)));
   }
 
+  async transferWorkspaceOwnership(workspaceId: string, currentOwnerId: string, newOwnerId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const ws = await tx.select().from(schema.workspacesTable).where(eq(schema.workspacesTable.id, workspaceId)).limit(1);
+      if (!ws[0]) throw new Error('Workspace not found');
+      if (ws[0].ownerId !== currentOwnerId) throw new Error('Only the current owner can transfer ownership');
+      const members = await tx.select().from(schema.workspaceMembersTable)
+        .where(eq(schema.workspaceMembersTable.workspaceId, workspaceId));
+      if (!members.some((m) => m.userId === newOwnerId) || !members.some((m) => m.userId === currentOwnerId)) {
+        throw new Error('Both users must be members of the workspace');
+      }
+      await tx.update(schema.workspacesTable).set({ ownerId: newOwnerId }).where(eq(schema.workspacesTable.id, workspaceId));
+      await tx.update(schema.workspaceMembersTable).set({ role: 'owner' })
+        .where(and(eq(schema.workspaceMembersTable.workspaceId, workspaceId), eq(schema.workspaceMembersTable.userId, newOwnerId)));
+      await tx.update(schema.workspaceMembersTable).set({ role: 'admin' })
+        .where(and(eq(schema.workspaceMembersTable.workspaceId, workspaceId), eq(schema.workspaceMembersTable.userId, currentOwnerId)));
+    });
+  }
+
   async acceptWorkspaceInvitation(token: string, userId: string): Promise<WorkspaceMember> {
     const inv = await this.findInvitationByToken(token);
     if (!inv) throw new Error('Invitation not found');

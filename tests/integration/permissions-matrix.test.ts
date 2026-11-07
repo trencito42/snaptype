@@ -96,3 +96,46 @@ describe('Workspace membership permissions', () => {
     expect((await accept('right')).statusCode).toBe(400); // replay
   });
 });
+
+import { userRoutes } from '../../apps/api/src/routes/user.routes.js';
+
+describe('Ownership transfer and account deletion (RB-020)', () => {
+  it('owner can transfer ownership, then delete their account without destroying the shared workspace', async () => {
+    const repo = new InMemoryRepository();
+    const auth = new AuthService(repo);
+    const owner = await repo.createUser('boss@x.test', 'Boss');
+    const mate = await repo.createUser('mate@x.test', 'Mate');
+    const outsider = await repo.createUser('out@x.test', 'Out');
+    const ws = await repo.createWorkspace('Shared', 'shared-own', owner.id, false);
+    await repo.addWorkspaceMember(ws.id, mate.id, 'editor');
+    await repo.createSnippet(ws.id, { name: 's', shortcut: 'ss', plainContent: 'x', tags: [] } as any, owner.id);
+    const oTok = await auth.createSessionForUser(owner.id);
+    const mTok = await auth.createSessionForUser(mate.id);
+    const xTok = await auth.createSessionForUser(outsider.id);
+    const app = fastify();
+    await workspaceRoutes(app, repo, auth);
+    await userRoutes(app, repo, auth);
+    await app.ready();
+    const post = (tok: string, userId: string) => app.inject({ method: 'POST', url: `/api/v1/workspaces/${ws.id}/transfer-ownership`, headers: { authorization: `Bearer ${tok}` }, payload: { userId } });
+
+    // Blocked while the owner still has other members
+    expect((await app.inject({ method: 'DELETE', url: '/api/v1/me', headers: { authorization: `Bearer ${oTok}` } })).statusCode).toBe(400);
+
+    expect((await post(mTok, mate.id)).statusCode).toBe(403);        // non-owner cannot
+    expect((await post(xTok, outsider.id)).statusCode).toBe(403);    // outsider cannot
+    expect((await post(oTok, outsider.id)).statusCode).toBe(400);    // target must be a member
+    expect((await post(oTok, owner.id)).statusCode).toBe(400);       // self
+    expect((await post(oTok, mate.id)).statusCode).toBe(200);
+
+    expect((await repo.findWorkspaceMember(ws.id, mate.id))?.role).toBe('owner');
+    expect((await repo.findWorkspaceMember(ws.id, owner.id))?.role).toBe('admin');
+    expect((await repo.findWorkspaceById(ws.id))?.ownerId).toBe(mate.id);
+    expect((await post(oTok, mate.id)).statusCode).toBe(403);        // former owner lost the right
+
+    // Former owner (now admin) may leave/delete; the workspace and its data survive
+    await repo.removeWorkspaceMember(ws.id, owner.id);
+    expect((await app.inject({ method: 'DELETE', url: '/api/v1/me', headers: { authorization: `Bearer ${oTok}` } })).statusCode).toBe(200);
+    expect(await repo.findWorkspaceById(ws.id)).not.toBeNull();
+    expect((await repo.findSnippets(ws.id)).length).toBe(1);
+  });
+});

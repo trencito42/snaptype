@@ -50,6 +50,8 @@ export interface IRepository {
   findWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]>;
   addWorkspaceMember(workspaceId: string, userId: string, role: WorkspaceRole): Promise<WorkspaceMember>;
   removeWorkspaceMember(workspaceId: string, userId: string): Promise<void>;
+  /** Atomically makes `newOwnerId` the owner and demotes `currentOwnerId` to admin. */
+  transferWorkspaceOwnership(workspaceId: string, currentOwnerId: string, newOwnerId: string): Promise<void>;
 
   // Workspace Invitations (ST-007)
   createWorkspaceInvitation(workspaceId: string, email: string, role: WorkspaceRole, invitedById: string, token: string, expiresAt: Date): Promise<WorkspaceInvitation>;
@@ -316,6 +318,18 @@ export class InMemoryRepository implements IRepository {
     };
     this.workspaceMembers.set(member.id, member);
     return member;
+  }
+
+  async transferWorkspaceOwnership(workspaceId: string, currentOwnerId: string, newOwnerId: string): Promise<void> {
+    const ws = this.workspaces.get(workspaceId);
+    if (!ws) throw new Error('Workspace not found');
+    if (ws.ownerId !== currentOwnerId) throw new Error('Only the current owner can transfer ownership');
+    const next = await this.findWorkspaceMember(workspaceId, newOwnerId);
+    const prev = await this.findWorkspaceMember(workspaceId, currentOwnerId);
+    if (!next || !prev) throw new Error('Both users must be members of the workspace');
+    next.role = 'owner';
+    prev.role = 'admin';
+    ws.ownerId = newOwnerId;
   }
 
   async removeWorkspaceMember(workspaceId: string, userId: string): Promise<void> {

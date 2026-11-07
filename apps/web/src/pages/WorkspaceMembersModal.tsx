@@ -30,6 +30,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
 
   const canManage = currentUserRole === 'owner' || currentUserRole === 'admin';
+  const isOwner = currentUserRole === 'owner';
 
   useEffect(() => {
     if (isOpen && workspaceId) {
@@ -116,6 +117,16 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
     }
   };
 
+  const handleTransferOwnership = async (userId: string, label: string) => {
+    if (!confirm(`Make ${label} the owner of "${workspaceName}"? You will become an administrator and cannot undo this yourself.`)) return;
+    try {
+      await api.transferWorkspaceOwnership(workspaceId, userId);
+      window.location.reload(); // role and permissions changed: reload to refresh everything that depends on them
+    } catch (err: any) {
+      setError(err.message || 'Failed to transfer ownership');
+    }
+  };
+
   const handleRevokeInvitation = async (invitationId: string) => {
     if (!confirm('Are you sure you want to revoke this pending invitation?')) return;
 
@@ -190,7 +201,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
                 onChange={(e) => setNewRole(e.target.value as any)}
               >
                 <option value="editor">Editor</option>
-                <option value="admin">Admin</option>
+                {isOwner && <option value="admin">Admin</option>}
                 <option value="viewer">Viewer</option>
               </select>
               <button type="submit" className="btn btn-primary btn-sm" disabled={inviting}>
@@ -294,7 +305,17 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
                     </div>
                   </div>
 
-                  {canManage && member.role !== 'owner' && (
+                  {isOwner && member.role !== 'owner' && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleTransferOwnership(member.userId, member.user?.name || member.user?.email || 'this member')}
+                      title="Transfer workspace ownership to this member"
+                    >
+                      Make owner
+                    </button>
+                  )}
+
+                  {canManage && member.role !== 'owner' && (isOwner || member.role !== 'admin') && (
                     <button
                       onClick={() => handleRemoveMember(member.userId)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 6 }}

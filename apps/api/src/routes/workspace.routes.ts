@@ -244,6 +244,34 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
   });
 
   // List pending workspace invitations
+  // Transfer ownership to another existing member (required before an owner can delete their account)
+  app.post('/api/v1/workspaces/:id/transfer-ownership', { preHandler: requireAuth }, async (request, reply) => {
+    const user = request.user!;
+    const { id } = request.params as { id: string };
+    const body = request.body as { userId?: string };
+    if (!body?.userId || typeof body.userId !== 'string') {
+      return reply.status(400).send({ error: 'userId of the new owner is required' });
+    }
+    const ws = await repo.findWorkspaceById(id);
+    if (!ws) return reply.status(404).send({ error: 'Workspace not found' });
+    const me = await repo.findWorkspaceMember(id, user.id);
+    if (!me || me.role !== 'owner' || ws.ownerId !== user.id) {
+      return reply.status(403).send({ error: 'Only the workspace owner can transfer ownership' });
+    }
+    if (ws.isPersonal) {
+      return reply.status(400).send({ error: 'A personal workspace cannot be transferred' });
+    }
+    if (body.userId === user.id) {
+      return reply.status(400).send({ error: 'You already own this workspace' });
+    }
+    const target = await repo.findWorkspaceMember(id, body.userId);
+    if (!target) {
+      return reply.status(400).send({ error: 'The new owner must already be a member of the workspace' });
+    }
+    await repo.transferWorkspaceOwnership(id, user.id, body.userId);
+    return { success: true, message: 'Ownership transferred. You are now an administrator of this workspace.' };
+  });
+
   app.get('/api/v1/workspaces/:id/invitations', { preHandler: requireAuth }, async (request, reply) => {
     const user = request.user!;
     const { id } = request.params as { id: string };
