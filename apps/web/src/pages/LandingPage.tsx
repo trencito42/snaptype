@@ -1,357 +1,191 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { ReverseShortcutMatcher, renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
-import { ArrowRight, CheckCircle2, ShieldCheck, Cpu, Zap, Download } from 'lucide-react';
+import type { Snippet, DynamicFormField } from '@snaptype/shared';
+import { ArrowRight, FolderTree, RefreshCw, Users, Braces } from 'lucide-react';
+import { LogoMark } from '../components/Logo.js';
+import './landing.css';
 
 interface LandingPageProps {
   onOpenAuth: () => void;
   onNavigate: (view: string) => void;
 }
 
-const DEMO_SNIPPETS = [
-  {
-    id: 'demo-1',
-    workspaceId: 'demo',
-    folderId: null,
-    name: 'Cerere bonus',
-    shortcut: 'cerbonus',
-    plainContent: `Bună ziua,
+const stamp = '2026-01-01T00:00:00.000Z';
+function demoSnippet(id: string, name: string, shortcut: string, plainContent: string): Snippet {
+  return {
+    id, workspaceId: 'demo', folderId: null, name, shortcut, plainContent,
+    tags: [], isFavorite: false, isEnabled: true, version: 1, usageCount: 0,
+    createdAt: stamp, updatedAt: stamp
+  } as Snippet;
+}
 
-Vă mulțumim pentru mesaj.
-
-Pentru a putea verifica solicitarea dumneavoastră legată de bonus, avem nevoie de informații suplimentare.
-
-Vă stăm cu plăcere la dispoziție.`,
-    tags: ['suport', 'bonus'],
-    isFavorite: true,
-    isEnabled: true,
-    version: 1,
-    usageCount: 42,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'demo-2',
-    workspaceId: 'demo',
-    folderId: null,
-    name: 'Verificare cont',
-    shortcut: 'msver',
-    plainContent: `Bună ziua,
-
-Vă informăm că verificarea contului dumneavoastră a fost finalizată cu succes.
-
-Vă dorim o zi excelentă!`,
-    tags: ['suport', 'verificare'],
-    isFavorite: true,
-    isEnabled: true,
-    version: 1,
-    usageCount: 128,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'demo-3',
-    workspaceId: 'demo',
-    folderId: null,
-    name: 'Salutare client',
-    shortcut: '/salut',
-    plainContent: `Bună ziua, {{input:customerName|default="stimate client"}},
-
-Cu ce vă putem ajuta astăzi în legătură cu solicitarea dumneavoastră?`,
-    tags: ['salut'],
-    isFavorite: false,
-    isEnabled: true,
-    version: 1,
-    usageCount: 89,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
+/** These are rendered by the SAME engine the extension uses. */
+const DEMO_SNIPPETS: Snippet[] = [
+  demoSnippet('d1', 'Order delay apology', '/late',
+    'Hi {{input:customer|label=Customer name|default=there}},\n\nI am sorry your order is late. I checked with our warehouse and it will ship within {{dropdown:days|label=Ships within|options=1 business day,2 business days,3 business days}}.\n\nIf anything changes, I will let you know right away.\n\n{{cursor}}'),
+  demoSnippet('d2', 'Thanks + close', '/thx',
+    'Thanks for getting in touch. If there is anything else I can help with, just reply to this message.'),
+  demoSnippet('d3', 'Request details', '/info',
+    'To look into this, could you please send me your order number and the email address used at checkout?')
 ];
 
+const EXAMPLES = ['/late', '/thx', '/info'];
+
 export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth, onNavigate }) => {
-  const [demoInput, setDemoInput] = useState('');
-  const [matcher] = useState(() => new ReverseShortcutMatcher(DEMO_SNIPPETS, false));
-  const [dynamicModal, setDynamicModal] = useState<{
-    snippet: any;
-    fields: any[];
-    matchLength: number;
-  } | null>(null);
-  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
+  const matcher = useMemo(() => new ReverseShortcutMatcher(DEMO_SNIPPETS, false), []);
+  const [text, setText] = useState('');
+  const [form, setForm] = useState<{ snippet: Snippet; fields: DynamicFormField[]; matchLength: number } | null>(null);
+  const [values, setValues] = useState<Record<string, string | boolean>>({});
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  const handleDemoChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setDemoInput(val);
-
-    // Run local in-memory reverse-trie matcher
-    const match = matcher.findMatch(val, {
-      triggerMode: 'immediate',
-      delimiterChar: '/',
-      caseSensitive: false,
-      assistantShortcut: 'Ctrl+Shift+Space',
-      excludedDomains: [],
-      disabledInSensitiveFields: true
+  const expand = (before: string, snippet: Snippet, matchLength: number, vars?: Record<string, string | boolean>) => {
+    const out = renderSnippet(snippet.plainContent, { variables: vars });
+    const prefix = before.slice(0, before.length - matchLength);
+    const next = prefix + out.text;
+    setText(next);
+    const caret = out.cursorOffset >= 0 ? prefix.length + out.cursorOffset : next.length;
+    requestAnimationFrame(() => {
+      const el = areaRef.current;
+      if (el) { el.focus(); el.setSelectionRange(caret, caret); }
     });
+  };
 
-    if (match) {
-      const fields = extractFormFields(match.snippet.plainContent);
-      if (fields.length > 0) {
-        // Needs dynamic input
-        const defaults: Record<string, any> = {};
-        for (const f of fields) defaults[f.name] = f.defaultValue || '';
-        setFieldValues(defaults);
-        setDynamicModal({
-          snippet: match.snippet,
-          fields,
-          matchLength: match.matchLength
-        });
-      } else {
-        // Immediate expansion
-        const rendered = renderSnippet(match.snippet.plainContent);
-        const prefix = val.slice(0, val.length - match.matchLength);
-        setDemoInput(prefix + rendered.text);
-      }
+  const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const match = matcher.findMatch(val, {
+      triggerMode: 'immediate', delimiterChar: '/', caseSensitive: false,
+      assistantShortcut: 'Ctrl+Shift+Space', excludedDomains: [], disabledInSensitiveFields: true
+    } as any);
+    if (!match) { setText(val); return; }
+    const fields = extractFormFields(match.snippet.plainContent);
+    if (fields.length) {
+      const defaults: Record<string, string | boolean> = {};
+      for (const f of fields) defaults[f.name] = f.type === 'dropdown' ? (f.options?.[0] ?? '') : (f.defaultValue ?? '');
+      setText(val);
+      setValues(defaults);
+      setForm({ snippet: match.snippet, fields, matchLength: match.matchLength });
+    } else {
+      expand(val, match.snippet, match.matchLength);
     }
   };
 
-  const handleApplyDynamic = () => {
-    if (!dynamicModal) return;
-    const rendered = renderSnippet(dynamicModal.snippet.plainContent, { variables: fieldValues });
-    const prefix = demoInput.slice(0, demoInput.length - dynamicModal.matchLength);
-    setDemoInput(prefix + rendered.text);
-    setDynamicModal(null);
+  const submitForm = () => {
+    if (!form) return;
+    expand(text, form.snippet, form.matchLength, values);
+    setForm(null);
+  };
+  const cancelForm = () => { setForm(null); areaRef.current?.focus(); };
+
+  useEffect(() => { dialogRef.current?.querySelector<HTMLElement>('input,select')?.focus(); }, [form]);
+
+  const insertExample = (s: string) => {
+    setText(''); setForm(null);
+    const el = areaRef.current;
+    if (el) { el.focus(); }
+    // Feed the shortcut through the same path real typing uses.
+    onChange({ target: { value: s } } as React.ChangeEvent<HTMLTextAreaElement>);
   };
 
   return (
-    <div style={{ maxWidth: 1160, margin: '0 auto', padding: '60px 24px 120px' }}>
-      {/* Hero Header */}
-      <div style={{ textAlign: 'center', maxWidth: 840, margin: '0 auto 60px' }}>
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 12px',
-          borderRadius: 20,
-          backgroundColor: 'var(--surface)',
-          border: '1px solid var(--border)',
-          fontSize: 13,
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
-          marginBottom: 24
-        }}>
-          <span style={{ color: '#166534', fontWeight: 800 }}>● Active</span> Precision Text Expansion Platform
-        </div>
-
-        <h1 style={{
-          fontSize: 'clamp(36px, 6vw, 62px)',
-          fontWeight: 800,
-          letterSpacing: '-1.5px',
-          lineHeight: 1.08,
-          marginBottom: 24,
-          color: 'var(--ink)'
-        }}>
-          Faster responses.<br />
-          <span style={{
-            background: 'linear-gradient(180deg, #101110 0%, #30332e 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
-          }}>
-            Zero typing fatigue.
-          </span>
-        </h1>
-
-        <p style={{
-          fontSize: 19,
-          lineHeight: 1.6,
-          color: 'var(--text-secondary)',
-          marginBottom: 36,
-          maxWidth: 680,
-          margin: '0 auto 36px'
-        }}>
-          SnapType gives customer support agents, operators, and writers instant shortcut expansion.
-          Built for low-end hardware, 100% local keystroke matching, and sub-millisecond precision.
+    <div className="lp">
+      <section className="lp-hero">
+        <p className="lp-eyebrow"><LogoMark size={18} /> Text expansion for browsers</p>
+        <h1>Type a short code.<br />Send the whole reply.</h1>
+        <p className="lp-lede">
+          SnapType turns shortcuts like <code>/late</code> into complete, consistent messages in any web text field.
+          Keep your snippets in one place and use them in Chrome and Firefox.
         </p>
-
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 14 }}>
-          <button className="btn btn-primary" style={{ padding: '12px 28px', fontSize: 16 }} onClick={onOpenAuth}>
-            Get Started Free <ArrowRight size={18} />
-          </button>
-          <button className="btn btn-secondary" style={{ padding: '12px 24px', fontSize: 16 }} onClick={() => onNavigate('install')}>
-            <Download size={18} /> Install Extension
-          </button>
+        <div className="lp-cta">
+          <button className="lp-btn lp-btn-primary" onClick={onOpenAuth}>Create an account <ArrowRight size={18} aria-hidden="true" /></button>
+          <button className="lp-btn" onClick={() => onNavigate('install')}>Install the extension</button>
         </div>
-      </div>
+        <p className="lp-note">Chrome / Chromium and Firefox. Store listings are not published yet — see install steps.</p>
+      </section>
 
-      {/* Interactive Live Demo */}
-      <div style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '32px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
-        marginBottom: 80
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div>
-            <h3 style={{ fontSize: 17, fontWeight: 700 }}>Try it in your browser right now</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Type any of these shortcuts inside the box below to test instant replacement:
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <span className="badge badge-mono">cerbonus</span>
-            <span className="badge badge-mono">msver</span>
-            <span className="badge badge-mono">/salut</span>
-          </div>
-        </div>
-
-        <div style={{ position: 'relative' }}>
-          <textarea
-            className="input input-mono"
-            style={{
-              height: 180,
-              fontSize: 15,
-              lineHeight: 1.6,
-              padding: 16,
-              resize: 'vertical'
-            }}
-            placeholder="Type 'cerbonus', 'msver', or '/salut' here..."
-            value={demoInput}
-            onChange={handleDemoChange}
-          />
-          {demoInput && (
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ position: 'absolute', bottom: 12, right: 12 }}
-              onClick={() => setDemoInput('')}
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Dynamic Form Modal (if triggered in demo) */}
-      {dynamicModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.4)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
-          <div style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 24,
-            width: 440,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
-          }}>
-            <h4 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Dynamic Fill-in Form</h4>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Snippet <strong>{dynamicModal.snippet.name}</strong> requests user parameters:
-            </p>
-
-            {dynamicModal.fields.map((field) => (
-              <div key={field.name} style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-                  {field.label}
-                </label>
-                <input
-                  type="text"
-                  className="input"
-                  value={fieldValues[field.name] || ''}
-                  onChange={(e) => setFieldValues({ ...fieldValues, [field.name]: e.target.value })}
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleApplyDynamic();
-                    if (e.key === 'Escape') setDynamicModal(null);
-                  }}
-                />
-              </div>
+      <section className="lp-demo" aria-labelledby="demo-h">
+        <div className="lp-demo-head">
+          <h2 id="demo-h">Try it here — nothing to install</h2>
+          <p>Type a shortcut, or press one below. This runs the same expansion engine as the extension.</p>
+          <div className="lp-chips" role="group" aria-label="Example shortcuts">
+            {EXAMPLES.map((s) => (
+              <button key={s} className="lp-chip" onClick={() => insertExample(s)}>{s}</button>
             ))}
+          </div>
+        </div>
+        <label htmlFor="demo-area" className="lp-sr">Demo message field</label>
+        <textarea
+          id="demo-area" ref={areaRef} className="lp-area" rows={9}
+          placeholder="Reply to customer… try typing /thx"
+          value={text} onChange={onChange}
+        />
+        <div className="lp-demo-foot">
+          <span>Undo with Ctrl+Z is not available in this demo.</span>
+          {text && <button className="lp-link" onClick={() => setText('')}>Clear</button>}
+        </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setDynamicModal(null)}>
-                Cancel (Esc)
-              </button>
-              <button className="btn btn-primary btn-sm" onClick={handleApplyDynamic}>
-                Insert Snippet (Enter)
-              </button>
+        {form && (
+          <div className="lp-overlay" onKeyDown={(e) => { if (e.key === 'Escape') cancelForm(); }}>
+            <div className="lp-dialog" role="dialog" aria-modal="true" aria-labelledby="form-h" ref={dialogRef}>
+              <h3 id="form-h">{form.snippet.name}</h3>
+              <p>Fill in the details for this reply.</p>
+              {form.fields.map((f) => (
+                <div className="lp-field" key={f.name}>
+                  <label htmlFor={`f-${f.name}`}>{f.label}</label>
+                  {f.type === 'dropdown' ? (
+                    <select id={`f-${f.name}`} value={String(values[f.name] ?? '')}
+                      onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}>
+                      {(f.options ?? []).map((o) => <option key={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input id={`f-${f.name}`} type="text" value={String(values[f.name] ?? '')}
+                      onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Enter') submitForm(); }} />
+                  )}
+                </div>
+              ))}
+              <div className="lp-dialog-actions">
+                <button className="lp-btn" onClick={cancelForm}>Cancel</button>
+                <button className="lp-btn lp-btn-primary" onClick={submitForm}>Insert</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
-      {/* Feature Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-        gap: 24,
-        marginBottom: 80
-      }}>
-        <div style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 28
-        }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 8,
-            backgroundColor: 'var(--surface-subtle)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 16, color: 'var(--ink)'
-          }}>
-            <Cpu size={22} />
-          </div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Engineered for Low-End PCs</h3>
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Reverse-trie index running entirely in browser RAM. Zero background timers, zero document scanning, zero battery drain.
-          </p>
-        </div>
+      <section className="lp-steps" aria-labelledby="how-h">
+        <h2 id="how-h">Up and running in four steps</h2>
+        <ol>
+          <li><strong>Create an account.</strong> Sign in with a one-time code sent to your email — no password.</li>
+          <li><strong>Install the extension</strong> for Chrome or Firefox and sign in.</li>
+          <li><strong>Write a snippet</strong> in the dashboard and give it a shortcut.</li>
+          <li><strong>Type the shortcut</strong> in any text field. It expands in place.</li>
+        </ol>
+      </section>
 
-        <div style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 28
-        }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 8,
-            backgroundColor: 'var(--surface-subtle)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 16, color: 'var(--ink)'
-          }}>
-            <ShieldCheck size={22} />
-          </div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>No Keystroke Surveillance</h3>
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Keystrokes never touch our servers. Automatic exclusion of passwords, credit cards, OTP codes, and banking domains.
-          </p>
-        </div>
+      <section className="lp-features" aria-labelledby="feat-h">
+        <h2 id="feat-h">What you get</h2>
+        <ul>
+          <li><Braces aria-hidden="true" /><div><h3>Dynamic snippets</h3><p>Fill-in fields, dropdowns, dates, clipboard, cursor placement, conditions and simple formulas.</p></div></li>
+          <li><FolderTree aria-hidden="true" /><div><h3>Organised library</h3><p>Folders, tags, search, favourites and per-site restrictions. Import and export your snippets.</p></div></li>
+          <li><RefreshCw aria-hidden="true" /><div><h3>Synced across browsers</h3><p>Snippets live in your account and are fetched by the extension when you sign in.</p></div></li>
+          <li><Users aria-hidden="true" /><div><h3>Shared workspaces</h3><p>Invite teammates as owner, admin, editor or viewer so a team can share one library.</p></div></li>
+        </ul>
+      </section>
 
-        <div style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 28
-        }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 8,
-            backgroundColor: 'var(--surface-subtle)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 16, color: 'var(--ink)'
-          }}>
-            <Zap size={22} />
-          </div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Dynamic Variables & Logic</h3>
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Current date/time formatting, fill-in forms, caret placement, bounded safe math formulas, and nested snippets.
-          </p>
-        </div>
-      </div>
+      <section className="lp-trust" aria-labelledby="trust-h">
+        <h2 id="trust-h">How your data is handled</h2>
+        <p>
+          Snippets are stored on the SnapType server so they can sync, and the extension talks to that server over the network.
+          Matching of what you type happens locally in your browser; keystrokes are not sent to the server.
+          The extension skips password fields and other sensitive inputs. Read the full <button className="lp-link" onClick={() => onNavigate('privacy')}>privacy policy</button>.
+        </p>
+      </section>
+
+      <section className="lp-final">
+        <h2>Write it once. Reuse it everywhere.</h2>
+        <button className="lp-btn lp-btn-primary" onClick={onOpenAuth}>Create an account <ArrowRight size={18} aria-hidden="true" /></button>
+      </section>
     </div>
   );
 };
-

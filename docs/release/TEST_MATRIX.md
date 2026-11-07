@@ -14,4 +14,6 @@ Environment of record for local runs: Windows 11, Node 22, vitest. No Docker, no
 | Chrome MV3 real execution | NOT TESTED | RB-007 |
 | Firefox MV3 real execution | NOT TESTED | RB-007 |
 | Editable-field compatibility | NOT TESTED | RB-007 |
-| Homepage responsive widths / Lighthouse | NOT TESTED | RB-006 |
+| Homepage horizontal overflow at 320/360/375/430/768/1280 | PASS | built bundle in in-app browser; scrollWidth == clientWidth at each |
+| Homepage demo: `/late` form (text + dropdown) -> insert, cursor placed, `/thx` immediate expansion | PASS | scripted DOM run in in-app browser (Chromium) |
+| Homepage 390/1024/1440, Lighthouse, keyboard/screen-reader, iOS Safari | NOT TESTED | RB-006 |
