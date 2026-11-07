@@ -1,5 +1,15 @@
 import nodemailer from 'nodemailer';
 
+/** Escape user-controlled text before placing it in an HTML email body or attribute. */
+export function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private isConfigured: boolean = false;
@@ -151,11 +161,11 @@ SnapType - Production-ready text expansion platform.
   <div class="container">
     <div class="logo">Snap<span class="accent">Type</span></div>
     <h1 class="title">You're invited to collaborate</h1>
-    <p class="desc"><strong>${inviterName}</strong> has invited you to join the <strong>${workspaceName}</strong> workspace as an <strong>${role}</strong>.</p>
+    <p class="desc"><strong>${escapeHtml(inviterName)}</strong> has invited you to join the <strong>${escapeHtml(workspaceName)}</strong> workspace as an <strong>${escapeHtml(role)}</strong>.</p>
     <div style="text-align: center; margin: 28px 0;">
-      <a href="${inviteUrl}" class="btn">Accept Invitation</a>
+      <a href="${escapeHtml(inviteUrl)}" class="btn">Accept Invitation</a>
     </div>
-    <p class="desc" style="font-size: 13px;">Or copy and paste this URL into your browser:<br><span style="word-break: break-all; color: #2563eb;">${inviteUrl}</span></p>
+    <p class="desc" style="font-size: 13px;">Or copy and paste this URL into your browser:<br><span style="word-break: break-all; color: #2563eb;">${escapeHtml(inviteUrl)}</span></p>
     <div class="footer">
       SnapType Platform &bull; High-performance text expansion &bull; Reliability and speed first
     </div>

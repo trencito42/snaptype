@@ -139,3 +139,14 @@ describe('Ownership transfer and account deletion (RB-020)', () => {
     expect((await repo.findSnippets(ws.id)).length).toBe(1);
   });
 });
+
+import { escapeHtml } from '../../apps/api/src/services/email.service.js';
+
+describe('Invitation email HTML escaping (RB-025)', () => {
+  it('neutralises markup in workspace and inviter names', () => {
+    const evil = '<a href="https://evil.test">Click</a> & "x"';
+    const out = escapeHtml(evil);
+    expect(out).not.toContain('<a');
+    expect(out).toBe('&lt;a href=&quot;https://evil.test&quot;&gt;Click&lt;/a&gt; &amp; &quot;x&quot;');
+  });
+});

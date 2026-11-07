@@ -27,3 +27,7 @@ Priorities: P0 data/security, P1 functional, P2 polish. Status: OPEN / FIXED-UNV
 | RB-021 | P1 | FIXED | Dynamic form in input/textarea restored a stale DOM Range instead of the control's caret, leaving the typed shortcut behind | `content.ts` (`isTextControl`) | Found by real-Chrome E2E; now passing |
 | RB-022 | P1 | FIXED | MySQL readiness (script + compose healthcheck) was satisfied by the temporary init server, causing intermittent CI/start failures | `legacy-upgrade-test.sh`, `docker-compose.yml` use TCP | Confirm on CI |
 | RB-023 | P2 | FIXED | Homepage muted text failed contrast (3.1:1) | `--text-muted` darkened | Lighthouse a11y 100 |
+| RB-024 | P1 | FIXED (test) | A native export could not be re-imported: import schema rejected `null` fields (`folderId`, `folderName`), so "backup restore" failed | `schemas.ts` | `release-audit.test.ts`; `scripts/ci/api-smoke.mjs` export -> import check |
+| RB-025 | P1 | FIXED (test) | Invitation email interpolated workspace/inviter names into HTML unescaped (markup/link injection in mail sent from the product's SMTP) | `email.service.ts` `escapeHtml` | `permissions-matrix.test.ts` |
+| RB-026 | P2 | FIXED | Unauthorized snippet create/update answered 400 instead of 403 | `snippet.routes.ts` | `api-smoke.mjs` |
+| RB-027 | P1 | OPEN | No MySQL-backed integration of the whole API in vitest; `scripts/ci/api-smoke.mjs` (35 checks) now runs against MySQL in CI but is only verified locally on the in-memory repository | `ci.yml` | CI green with the MySQL step |
