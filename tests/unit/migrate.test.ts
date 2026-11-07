@@ -84,5 +84,66 @@ describe('ST-008 & ST-045: Versioned Migrations Runner', () => {
 
     spyCreate.mockRestore();
   });
+
+  it('fails safely and rethrows when a migration query fails, preventing incomplete recording', async () => {
+    const recordedIds: string[] = [];
+
+    const mockConnection = {
+      query: vi.fn(async (sql: string, params?: any[]) => {
+        if (sql.includes('SELECT id FROM schema_migrations')) {
+          return [[]]; // fresh installation: no migrations applied
+        }
+        if (sql.includes('users') || sql.includes('CREATE TABLE IF NOT EXISTS `users`') || sql.includes('CREATE TABLE IF NOT EXISTS users')) {
+          throw new Error('Simulated DDL syntax error in 0001');
+        }
+        if (sql.includes('INSERT INTO schema_migrations')) {
+          recordedIds.push(params?.[0]);
+          return [{ affectedRows: 1 }];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+      end: vi.fn(async () => {})
+    };
+
+    const spyCreate = vi.spyOn(mysql, 'createConnection').mockResolvedValue(mockConnection as any);
+
+    await expect(runMigrations('mysql://user:pass@localhost:3306/test_db'))
+      .rejects.toThrow('Migration 0001_initial_schema.sql failed');
+
+    // Failed migration must NOT be recorded in schema_migrations!
+    expect(recordedIds).not.toContain('0001_initial_schema.sql');
+    expect(mockConnection.end).toHaveBeenCalled();
+
+    spyCreate.mockRestore();
+  });
+
+  it('fails safely and throws when legacy token migration detects unhashed records', async () => {
+    const mockConnection = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('SELECT id FROM schema_migrations')) {
+          return [[{ id: '0001_initial_schema.sql' }, { id: '0002_schema_upgrade.sql' }, { id: '0003_upgrade_invitations_token_hash.sql' }]];
+        }
+        if (sql.includes('FROM information_schema.TABLES')) {
+          return [[{ 1: 1 }]];
+        }
+        if (sql.includes('SELECT COLUMN_NAME FROM information_schema.COLUMNS')) {
+          return [[{ COLUMN_NAME: 'token' }]];
+        }
+        if (sql.includes('COUNT(*) AS unhashed_count')) {
+          return [[{ unhashed_count: 3 }]]; // 3 rows failed to hash
+        }
+        return [{ affectedRows: 1 }];
+      }),
+      end: vi.fn(async () => {})
+    };
+
+    const spyCreate = vi.spyOn(mysql, 'createConnection').mockResolvedValue(mockConnection as any);
+
+    await expect(runMigrations('mysql://user:pass@localhost:3306/test_db'))
+      .rejects.toThrow('could not be safely hashed');
+
+    expect(mockConnection.end).toHaveBeenCalled();
+    spyCreate.mockRestore();
+  });
 });
 

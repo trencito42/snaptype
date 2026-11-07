@@ -336,6 +336,36 @@ export class MySQLRepository implements IRepository {
     };
   }
 
+  async findWorkspaceInvitationById(workspaceId: string, id: string): Promise<WorkspaceInvitation | null> {
+    const rows = await this.db.select().from(schema.workspaceInvitationsTable)
+      .where(and(eq(schema.workspaceInvitationsTable.id, id), eq(schema.workspaceInvitationsTable.workspaceId, workspaceId)))
+      .limit(1);
+    if (!rows[0]) return null;
+    const r = rows[0];
+    return {
+      id: r.id,
+      workspaceId: r.workspaceId,
+      email: r.email,
+      role: r.role as WorkspaceRole,
+      tokenHash: r.tokenHash,
+      invitedById: r.invitedById,
+      expiresAt: r.expiresAt.toISOString(),
+      acceptedAt: r.acceptedAt?.toISOString() || null,
+      revokedAt: r.revokedAt?.toISOString() || null,
+      createdAt: r.createdAt.toISOString()
+    };
+  }
+
+  async updateWorkspaceInvitationToken(id: string, token: string, expiresAt: Date): Promise<void> {
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+    await this.db.update(schema.workspaceInvitationsTable)
+      .set({
+        tokenHash,
+        expiresAt
+      })
+      .where(eq(schema.workspaceInvitationsTable.id, id));
+  }
+
   async findWorkspaceInvitations(workspaceId: string): Promise<WorkspaceInvitation[]> {
     const now = new Date();
     const rows = await this.db.select().from(schema.workspaceInvitationsTable)
@@ -1028,51 +1058,71 @@ export class MySQLRepository implements IRepository {
   }
 
   async createTable(workspaceId: string, data: { name: string; description?: string | null; columns: DataTableColumn[] }): Promise<DataTable> {
-    const id = uuidv4();
-    const now = new Date();
-    await this.db.insert(schema.dataTablesTable).values({
-      id,
-      workspaceId,
-      name: data.name,
-      description: data.description ?? null,
-      columns: data.columns,
-      createdAt: now,
-      updatedAt: now
+    return await this.db.transaction(async (tx) => {
+      const id = uuidv4();
+      const now = new Date();
+      await this.bumpWorkspaceRevisionTx(tx, workspaceId);
+      await tx.insert(schema.dataTablesTable).values({
+        id,
+        workspaceId,
+        name: data.name,
+        description: data.description ?? null,
+        columns: data.columns,
+        createdAt: now,
+        updatedAt: now
+      });
+      return {
+        id,
+        workspaceId,
+        name: data.name,
+        description: data.description ?? null,
+        columns: data.columns,
+        rowCount: 0,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString()
+      };
     });
-    return {
-      id,
-      workspaceId,
-      name: data.name,
-      description: data.description ?? null,
-      columns: data.columns,
-      rowCount: 0,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString()
-    };
   }
 
   async updateTable(id: string, data: Partial<{ name: string; description?: string | null; columns: DataTableColumn[] }>): Promise<DataTable> {
-    const table = await this.findTableById(id);
-    if (!table) throw new Error('Table not found');
-    const now = new Date();
-    await this.db.update(schema.dataTablesTable).set({
-      name: data.name ?? table.name,
-      description: data.description !== undefined ? data.description : table.description,
-      columns: data.columns ?? table.columns,
-      updatedAt: now
-    }).where(eq(schema.dataTablesTable.id, id));
+    return await this.db.transaction(async (tx) => {
+      const table = await this.findTableById(id);
+      if (!table) throw new Error('Table not found');
+      const now = new Date();
+      await this.bumpWorkspaceRevisionTx(tx, table.workspaceId);
+      await tx.update(schema.dataTablesTable).set({
+        name: data.name ?? table.name,
+        description: data.description !== undefined ? data.description : table.description,
+        columns: data.columns ?? table.columns,
+        updatedAt: now
+      }).where(eq(schema.dataTablesTable.id, id));
 
-    return {
-      ...table,
-      name: data.name ?? table.name,
-      description: data.description !== undefined ? data.description : table.description,
-      columns: data.columns ?? table.columns,
-      updatedAt: now.toISOString()
-    };
+      return {
+        ...table,
+        name: data.name ?? table.name,
+        description: data.description !== undefined ? data.description : table.description,
+        columns: data.columns ?? table.columns,
+        updatedAt: now.toISOString()
+      };
+    });
   }
 
   async deleteTable(id: string): Promise<void> {
-    await this.db.delete(schema.dataTablesTable).where(eq(schema.dataTablesTable.id, id));
+    await this.db.transaction(async (tx) => {
+      const table = await this.findTableById(id);
+      if (!table) return;
+      const now = new Date();
+      const rev = await this.bumpWorkspaceRevisionTx(tx, table.workspaceId);
+      await tx.insert(schema.syncTombstonesTable).values({
+        id: uuidv4(),
+        workspaceId: table.workspaceId,
+        entityType: 'table',
+        entityId: id,
+        revision: rev,
+        createdAt: now
+      });
+      await tx.delete(schema.dataTablesTable).where(eq(schema.dataTablesTable.id, id));
+    });
   }
 
   async findTableRows(tableId: string): Promise<DataTableRow[]> {
@@ -1101,47 +1151,62 @@ export class MySQLRepository implements IRepository {
   }
 
   async createTableRow(tableId: string, data: Record<string, any>): Promise<DataTableRow> {
-    const id = uuidv4();
-    const now = new Date();
-    await this.db.insert(schema.dataRowsTable).values({
-      id,
-      tableId,
-      data,
-      createdAt: now,
-      updatedAt: now
+    return await this.db.transaction(async (tx) => {
+      const table = await this.findTableById(tableId);
+      if (!table) throw new Error('Table not found');
+      const id = uuidv4();
+      const now = new Date();
+      await this.bumpWorkspaceRevisionTx(tx, table.workspaceId);
+      await tx.insert(schema.dataRowsTable).values({
+        id,
+        tableId,
+        data,
+        createdAt: now,
+        updatedAt: now
+      });
+      return {
+        id,
+        tableId,
+        data,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString()
+      };
     });
-    return {
-      id,
-      tableId,
-      data,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString()
-    };
   }
 
   async updateTableRow(tableId: string, rowId: string, data: Record<string, any>): Promise<DataTableRow | null> {
-    const now = new Date();
-    const existing = await this.db.select().from(schema.dataRowsTable)
-      .where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)))
-      .limit(1);
-    if (!existing[0]) return null;
-    const merged = { ...(existing[0].data as Record<string, any>), ...data };
-    await this.db.update(schema.dataRowsTable).set({
-      data: merged,
-      updatedAt: now
-    }).where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)));
-    return {
-      id: existing[0].id,
-      tableId: existing[0].tableId,
-      data: merged,
-      createdAt: existing[0].createdAt.toISOString(),
-      updatedAt: now.toISOString()
-    };
+    return await this.db.transaction(async (tx) => {
+      const table = await this.findTableById(tableId);
+      if (!table) throw new Error('Table not found');
+      const now = new Date();
+      const existing = await tx.select().from(schema.dataRowsTable)
+        .where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)))
+        .limit(1);
+      if (!existing[0]) return null;
+      const merged = { ...(existing[0].data as Record<string, any>), ...data };
+      await this.bumpWorkspaceRevisionTx(tx, table.workspaceId);
+      await tx.update(schema.dataRowsTable).set({
+        data: merged,
+        updatedAt: now
+      }).where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)));
+      return {
+        id: existing[0].id,
+        tableId: existing[0].tableId,
+        data: merged,
+        createdAt: existing[0].createdAt.toISOString(),
+        updatedAt: now.toISOString()
+      };
+    });
   }
 
   async deleteTableRow(tableId: string, rowId: string): Promise<boolean> {
-    const result = await this.db.delete(schema.dataRowsTable)
-      .where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)));
-    return true;
+    return await this.db.transaction(async (tx) => {
+      const table = await this.findTableById(tableId);
+      if (!table) return false;
+      await this.bumpWorkspaceRevisionTx(tx, table.workspaceId);
+      await tx.delete(schema.dataRowsTable)
+        .where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)));
+      return true;
+    });
   }
 }

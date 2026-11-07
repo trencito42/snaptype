@@ -104,16 +104,88 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
     const workspace = await repo.findWorkspaceById(id);
     const workspaceName = workspace?.name || 'SnapType Workspace';
 
+    let emailDelivered = false;
+    let emailError: string | undefined;
     try {
-      await emailService.sendWorkspaceInvitation(targetEmail, workspaceName, inviterName, inviteLink, assignedRole);
-    } catch (emailErr) {
+      const emailRes = await emailService.sendWorkspaceInvitation(targetEmail, workspaceName, inviterName, inviteLink, assignedRole);
+      emailDelivered = typeof emailRes === 'boolean' ? emailRes : emailRes.delivered;
+      if (!emailDelivered && typeof emailRes === 'object' && emailRes.error) {
+        emailError = emailRes.error;
+      }
+    } catch (emailErr: any) {
       console.error('[SnapType] Failed to send invitation email:', emailErr);
+      emailDelivered = false;
+      emailError = emailErr?.message || 'Failed to dispatch email';
     }
+
+    const message = emailDelivered
+      ? `Invitation issued and email delivered successfully to ${targetEmail}.`
+      : `Invitation created, but email could not be delivered (${emailError || 'SMTP unconfigured or delivery failed'}). Share the invite link directly.`;
 
     return reply.status(201).send({
       invitation,
       inviteLink,
-      message: `Invitation issued for ${targetEmail}. Pending acceptance.`
+      emailDelivered,
+      message
+    });
+  });
+
+  // Resend workspace invitation
+  app.post('/api/v1/workspaces/:id/invitations/:invitationId/resend', { preHandler: requireAuth }, async (request, reply) => {
+    const user = request.user!;
+    const { id, invitationId } = request.params as { id: string; invitationId: string };
+
+    const member = await repo.findWorkspaceMember(id, user.id);
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      return reply.status(403).send({ error: 'Owner or admin access required to resend invitations' });
+    }
+
+    const inv = await repo.findWorkspaceInvitationById(id, invitationId);
+    if (!inv) {
+      return reply.status(404).send({ error: 'Invitation not found' });
+    }
+
+    if (inv.revokedAt) {
+      return reply.status(400).send({ error: 'Cannot resend a revoked invitation' });
+    }
+
+    if (inv.acceptedAt) {
+      return reply.status(400).send({ error: 'Cannot resend an already accepted invitation' });
+    }
+
+    const freshToken = crypto.randomBytes(32).toString('hex');
+    const freshExpiresAt = new Date(Date.now() + INVITATION_DURATION_MS);
+    await repo.updateWorkspaceInvitationToken(invitationId, freshToken, freshExpiresAt);
+
+    const appUrl = process.env.SNAPTYPE_APP_URL || process.env.APP_URL || 'http://localhost:5173';
+    const inviteLink = `${appUrl}/invite?token=${freshToken}`;
+    const inviterName = user.name || user.email;
+    const workspace = await repo.findWorkspaceById(id);
+    const workspaceName = workspace?.name || 'SnapType Workspace';
+
+    let emailDelivered = false;
+    let emailError: string | undefined;
+    try {
+      const emailRes = await emailService.sendWorkspaceInvitation(inv.email, workspaceName, inviterName, inviteLink, inv.role);
+      emailDelivered = typeof emailRes === 'boolean' ? emailRes : emailRes.delivered;
+      if (!emailDelivered && typeof emailRes === 'object' && emailRes.error) {
+        emailError = emailRes.error;
+      }
+    } catch (emailErr: any) {
+      console.error('[SnapType] Failed to resend invitation email:', emailErr);
+      emailDelivered = false;
+      emailError = emailErr?.message || 'Failed to dispatch email';
+    }
+
+    const message = emailDelivered
+      ? `Invitation resent and email delivered to ${inv.email}.`
+      : `Invitation updated with new link, but email could not be delivered (${emailError || 'SMTP unconfigured or delivery failed'}). Share the invite link directly.`;
+
+    return reply.status(200).send({
+      success: true,
+      emailDelivered,
+      inviteLink,
+      message
     });
   });
 

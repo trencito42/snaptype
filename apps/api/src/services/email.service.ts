@@ -114,7 +114,7 @@ SnapType - Production-ready text expansion platform.
     inviterName: string,
     inviteUrl: string,
     role: string
-  ): Promise<boolean> {
+  ): Promise<{ delivered: boolean; error?: string }> {
     const from = process.env.SMTP_FROM || 'SnapType <noreply@snaptype.app>';
     const subject = `${inviterName} invited you to join ${workspaceName} on SnapType`;
 
@@ -175,25 +175,26 @@ SnapType - Production-ready text expansion platform.
           text: textContent,
           html: htmlContent
         });
-        return true;
+        return { delivered: true };
       } catch (err: any) {
         console.error(`[Email Error] Failed to send workspace invitation to ${email}: ${err.message}`);
+        // NEVER log invite links/tokens in production
         if (!isProduction) {
           console.log(`[Email Dev Fallback] Invitation link for ${email}: ${inviteUrl}`);
         }
-        return false;
+        return { delivered: false, error: err.message };
       }
     } else {
       if (isProduction) {
         console.error(`[Email Error] SMTP is not configured in production environment.`);
-        return false;
+        return { delivered: false, error: 'SMTP is not configured in production environment' };
       }
       console.log(`\n============================================================`);
       console.log(`[SnapType Invite (Dev)] Workspace Invitation for: ${email}`);
       console.log(`>>> WORKSPACE: ${workspaceName} (${role}) by ${inviterName}`);
       console.log(`>>> INVITE LINK: ${inviteUrl}`);
       console.log(`============================================================\n`);
-      return true;
+      return { delivered: false, error: 'SMTP unconfigured; logged to development console' };
     }
   }
 }

@@ -217,10 +217,17 @@ class ApiClient {
   }
 
   public async addWorkspaceMember(workspaceId: string, email: string, role: string = 'editor') {
-    return this.request<{ invitation: any; inviteLink?: string; message: string }>(`/workspaces/${workspaceId}/members`, {
+    return this.request<{ invitation: any; inviteLink?: string; emailDelivered?: boolean; message: string }>(`/workspaces/${workspaceId}/members`, {
       method: 'POST',
       body: JSON.stringify({ email, role })
     });
+  }
+
+  public async resendWorkspaceInvitation(workspaceId: string, invitationId: string) {
+    return this.request<{ success: boolean; emailDelivered: boolean; inviteLink?: string; message: string }>(
+      `/workspaces/${workspaceId}/invitations/${invitationId}/resend`,
+      { method: 'POST' }
+    );
   }
 
   public async removeWorkspaceMember(workspaceId: string, userId: string) {

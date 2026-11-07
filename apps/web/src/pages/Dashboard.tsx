@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { Snippet, Folder, User, Workspace, SnippetRevision } from '@snaptype/shared';
 import { renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
+import { DraftManager } from '../utils/draft-manager.js';
 import {
   Folder as FolderIcon,
   FolderPlus,
@@ -91,16 +92,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showDataTablesModal, setShowDataTablesModal] = useState(false);
 
-  // Debounced Autosave refs (ST-035 & Requirement 17)
+  // Race-safe Draft & Autosave Manager (ST-035 & Requirement 17 / Issue 3)
   const isInitialLoad = React.useRef(true);
   const snippetLoadedRef = React.useRef<string | null>(null);
-  const isDirty = React.useRef(false);
-  const isSavingRef = React.useRef(false);
-  const pendingSaveRef = React.useRef(false);
+  const draftManagerRef = React.useRef<DraftManager>(new DraftManager());
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty.current) {
+      if (draftManagerRef.current.hasDirtyDrafts()) {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -109,15 +108,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
+  const updateEditorDraft = (updates: Partial<{
+    name: string;
+    shortcut: string;
+    folderId: string | null;
+    plainContent: string;
+    description: string;
+    tags: string;
+    isFavorite: boolean;
+    isEnabled: boolean;
+  }>) => {
+    if (updates.name !== undefined) setEditName(updates.name);
+    if (updates.shortcut !== undefined) setEditShortcut(updates.shortcut);
+    if (updates.folderId !== undefined) setEditFolderId(updates.folderId);
+    if (updates.plainContent !== undefined) setEditPlainContent(updates.plainContent);
+    if (updates.description !== undefined) setEditDescription(updates.description);
+    if (updates.tags !== undefined) setEditTags(updates.tags);
+    if (updates.isFavorite !== undefined) setEditIsFavorite(updates.isFavorite);
+    if (updates.isEnabled !== undefined) setEditIsEnabled(updates.isEnabled);
+
+    if (selectedSnippetId) {
+      draftManagerRef.current.updateDraft(selectedSnippetId, updates);
+    }
+  };
+
   useEffect(() => {
     if (isInitialLoad.current) {
       isInitialLoad.current = false;
       return;
     }
-    if (!isDirty.current) {
-      return;
-    }
     if (!selectedSnippetId) return;
+    const draft = draftManagerRef.current.getDraft(selectedSnippetId);
+    if (!draft || !draft.isDirty) return;
 
     const timer = setTimeout(() => {
       handleSaveSnippet();
@@ -167,25 +189,48 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const selectSnippet = async (snippet: Snippet) => {
-    if (selectedSnippetId && selectedSnippetId !== snippet.id && isDirty.current) {
-      await handleSaveSnippet();
+    // 1. If previous snippet has unsaved dirty changes, flush and await before switching
+    if (selectedSnippetId && selectedSnippetId !== snippet.id) {
+      const currentDraft = draftManagerRef.current.getDraft(selectedSnippetId);
+      if (currentDraft && currentDraft.isDirty) {
+        const original = snippets.find((s) => s.id === selectedSnippetId);
+        if (original) {
+          const res = await draftManagerRef.current.save(
+            selectedSnippetId,
+            original,
+            async (id, payload) => (await api.updateSnippet(id, payload)).snippet
+          );
+
+          if (!res.success) {
+            const discard = confirm(
+              `You have unsaved changes in "${original.name}" that could not be saved. Discard changes and switch?`
+            );
+            if (!discard) return;
+            draftManagerRef.current.discardDraft(original);
+          } else if (res.snippet) {
+            setSnippets((prev) => prev.map((s) => (s.id === res.snippet!.id ? res.snippet! : s)));
+          }
+        }
+      }
     }
-    isDirty.current = false;
+
+    // 2. Initialize or load draft for target snippet
+    const draft = draftManagerRef.current.initDraft(snippet);
     snippetLoadedRef.current = snippet.id;
     setSelectedSnippetId(snippet.id);
-    setEditName(snippet.name);
-    setEditShortcut(snippet.shortcut);
-    setEditFolderId(snippet.folderId);
-    setEditPlainContent(snippet.plainContent);
-    setEditDescription(snippet.description || '');
-    setEditTags((snippet.tags || []).join(', '));
-    setEditIsFavorite(snippet.isFavorite);
-    setEditIsEnabled(snippet.isEnabled);
-    setSaveStatus('idle');
+    setEditName(draft.name);
+    setEditShortcut(draft.shortcut);
+    setEditFolderId(draft.folderId);
+    setEditPlainContent(draft.plainContent);
+    setEditDescription(draft.description);
+    setEditTags(draft.tags);
+    setEditIsFavorite(draft.isFavorite);
+    setEditIsEnabled(draft.isEnabled);
+    setSaveStatus(draft.isDirty ? 'saved' : 'idle');
     setErrorMessage(null);
 
     // Reset preview vars with defaults
-    const fields = extractFormFields(snippet.plainContent);
+    const fields = extractFormFields(draft.plainContent);
     const defaults: Record<string, any> = {};
     for (const f of fields) {
       defaults[f.name] = f.defaultValue || '';
@@ -194,19 +239,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const changeActiveWorkspace = async (newWsId: string) => {
-    if (isDirty.current && selectedSnippetId) {
-      await handleSaveSnippet();
+    if (selectedSnippetId) {
+      const currentDraft = draftManagerRef.current.getDraft(selectedSnippetId);
+      if (currentDraft && currentDraft.isDirty) {
+        const original = snippets.find((s) => s.id === selectedSnippetId);
+        if (original) {
+          const res = await draftManagerRef.current.save(
+            selectedSnippetId,
+            original,
+            async (id, p) => (await api.updateSnippet(id, p)).snippet
+          );
+          if (!res.success) {
+            if (!confirm(`You have unsaved changes in "${original.name}" that could not be saved. Discard and switch workspace?`)) {
+              return;
+            }
+            draftManagerRef.current.discardDraft(original);
+          }
+        }
+      }
     }
+
     setActiveWorkspaceId(newWsId);
     setSelectedSnippetId(null);
     setSelectedFolderId('all');
 
-    // Broadcast to extension content script (ST-037 / Blocker 2)
+    // Broadcast to extension content script (ST-037 / Blocker 2 / Issue 5: target origin)
     if (typeof window !== 'undefined') {
       window.postMessage({
         type: 'SNAPTYPE_DASHBOARD_WORKSPACE_CHANGE',
         workspaceId: newWsId
-      }, '*');
+      }, window.location.origin);
     }
 
     await refreshData(newWsId);
@@ -242,57 +304,35 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const handleSaveSnippet = async (forceOverwrite = false) => {
     if (!selectedSnippetId) return;
+    const original = snippets.find((s) => s.id === selectedSnippetId);
+    if (!original) return;
 
-    if (isSavingRef.current) {
-      pendingSaveRef.current = true;
-      return;
-    }
-
-    isSavingRef.current = true;
     setSaveStatus('saving');
     setErrorMessage(null);
 
-    const current = snippets.find((s) => s.id === selectedSnippetId);
-    if (!current) {
-      isSavingRef.current = false;
-      return;
-    }
+    const res = await draftManagerRef.current.save(
+      selectedSnippetId,
+      original,
+      async (id, payload) => {
+        const r = await api.updateSnippet(id, payload);
+        return r.snippet;
+      },
+      forceOverwrite
+    );
 
-    const tagsArray = editTags
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
-
-    try {
-      const res = await api.updateSnippet(selectedSnippetId, {
-        name: editName,
-        shortcut: editShortcut,
-        folderId: editFolderId,
-        plainContent: editPlainContent,
-        description: editDescription,
-        tags: tagsArray,
-        isFavorite: editIsFavorite,
-        isEnabled: editIsEnabled,
-        expectedVersion: forceOverwrite ? undefined : current.version
-      });
-
+    if (res.success) {
+      if (res.snippet) {
+        setSnippets((prev) => prev.map((s) => (s.id === res.snippet!.id ? res.snippet! : s)));
+      }
       setSaveStatus('saved');
-      isDirty.current = false;
-      setSnippets(snippets.map((s) => (s.id === res.snippet.id ? res.snippet : s)));
       setTimeout(() => setSaveStatus('idle'), 2500);
-    } catch (err: any) {
-      if (err.status === 409) {
+    } else {
+      if (res.conflict) {
         setSaveStatus('conflict');
         setErrorMessage('Conflict: Modified on another device or tab.');
       } else {
         setSaveStatus('error');
-        setErrorMessage(err.message || 'Failed to save');
-      }
-    } finally {
-      isSavingRef.current = false;
-      if (pendingSaveRef.current) {
-        pendingSaveRef.current = false;
-        handleSaveSnippet();
+        setErrorMessage(res.error || 'Failed to save');
       }
     }
   };
@@ -403,13 +443,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const insertCommand = (syntax: string) => {
-    isDirty.current = true;
-    setEditPlainContent((prev) => (prev ? `${prev} ${syntax}` : syntax));
+    const next = editPlainContent ? `${editPlainContent} ${syntax}` : syntax;
+    updateEditorDraft({ plainContent: next });
   };
 
   const wrapFormat = (prefix: string, suffix: string = prefix, defaultText: string = 'text') => {
-    isDirty.current = true;
-    setEditPlainContent((prev) => (prev ? `${prev} ${prefix}${defaultText}${suffix}` : `${prefix}${defaultText}${suffix}`));
+    const next = editPlainContent ? `${editPlainContent} ${prefix}${defaultText}${suffix}` : `${prefix}${defaultText}${suffix}`;
+    updateEditorDraft({ plainContent: next });
   };
 
   const currentWorkspace = workspaces.find((w) => w.workspace.id === activeWorkspaceId);
@@ -803,7 +843,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       type="text"
                       className="input"
                       value={editName}
-                      onChange={(e) => { setEditName(e.target.value); isDirty.current = true; }}
+                      onChange={(e) => updateEditorDraft({ name: e.target.value })}
                     />
                   </div>
                   <div>
@@ -814,7 +854,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       type="text"
                       className="input input-mono"
                       value={editShortcut}
-                      onChange={(e) => { setEditShortcut(e.target.value); isDirty.current = true; }}
+                      onChange={(e) => updateEditorDraft({ shortcut: e.target.value })}
                     />
                   </div>
                   <div>
@@ -824,7 +864,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <select
                       className="input"
                       value={editFolderId || ''}
-                      onChange={(e) => { setEditFolderId(e.target.value || null); isDirty.current = true; }}
+                      onChange={(e) => updateEditorDraft({ folderId: e.target.value || null })}
                     >
                       <option value="">(No Folder)</option>
                       {folders.map((f) => (
@@ -971,7 +1011,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       borderTopRightRadius: 0
                     }}
                     value={editPlainContent}
-                    onChange={(e) => { setEditPlainContent(e.target.value); isDirty.current = true; }}
+                    onChange={(e) => updateEditorDraft({ plainContent: e.target.value })}
                     placeholder="Enter your snippet text, formatting, or dynamic {{tags}} here..."
                   />
                 </div>
@@ -987,7 +1027,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       className="input"
                       placeholder="suport, bonus, verificare"
                       value={editTags}
-                      onChange={(e) => { setEditTags(e.target.value); isDirty.current = true; }}
+                      onChange={(e) => updateEditorDraft({ tags: e.target.value })}
                     />
                   </div>
                   <div>
@@ -999,7 +1039,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       className="input"
                       placeholder="Short note about when to use"
                       value={editDescription}
-                      onChange={(e) => { setEditDescription(e.target.value); isDirty.current = true; }}
+                      onChange={(e) => updateEditorDraft({ description: e.target.value })}
                     />
                   </div>
                 </div>

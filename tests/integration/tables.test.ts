@@ -152,5 +152,35 @@ describe('Data Tables and Lookup Resolution', () => {
     const forcedBody = JSON.parse(forcedRes.body);
     expect(forcedBody.tables).toBeDefined();
     expect(forcedBody.tables).toHaveLength(1);
+
+    // 4. Updating a table row advances workspace revision and triggers sync in another browser
+    const existingRows = await repo.findTableRows(tbl.id);
+    await repo.updateTableRow(tbl.id, existingRows[0].id, { sku: 'PROD-200-UPDATED' });
+
+    const updatedSyncRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sync?workspaceId=${ws.id}&lastRevision=${currentRev}`,
+      headers: { authorization: `Bearer ${userToken}` }
+    });
+    expect(updatedSyncRes.statusCode).toBe(200);
+    const updatedSyncBody = JSON.parse(updatedSyncRes.body);
+    expect(updatedSyncBody.currentRevision).toBeGreaterThan(currentRev);
+    expect(updatedSyncBody.tables).toBeDefined();
+    expect(updatedSyncBody.tables[0].rows[0].data.sku).toBe('PROD-200-UPDATED');
+
+    // 5. Deleting a table advances revision and sync returns empty tables list
+    const revBeforeDelete = updatedSyncBody.currentRevision;
+    await repo.deleteTable(tbl.id);
+
+    const deleteSyncRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sync?workspaceId=${ws.id}&lastRevision=${revBeforeDelete}`,
+      headers: { authorization: `Bearer ${userToken}` }
+    });
+    expect(deleteSyncRes.statusCode).toBe(200);
+    const deleteSyncBody = JSON.parse(deleteSyncRes.body);
+    expect(deleteSyncBody.currentRevision).toBeGreaterThan(revBeforeDelete);
+    expect(deleteSyncBody.tables).toBeDefined();
+    expect(deleteSyncBody.tables).toHaveLength(0);
   });
 });

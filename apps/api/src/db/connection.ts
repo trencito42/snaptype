@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise';
 import * as schema from './schema.js';
 import { IRepository, InMemoryRepository } from './repository.js';
 import { MySQLRepository } from './mysql-repository.js';
+import { runMigrations } from './migrate.js';
 
 let activeRepository: IRepository | null = null;
 let connectionType: 'mysql' | 'memory' = 'memory';
@@ -64,6 +65,9 @@ export async function initDatabase(databaseUrl?: string, forceDriver?: string): 
     // Test connectivity
     const connection = await pool.getConnection();
     connection.release();
+
+    // Ensure database migrations are applied before accepting traffic
+    await runMigrations(url);
 
     const db = drizzle(pool, { schema, mode: 'default' });
     const repo = new MySQLRepository(db);

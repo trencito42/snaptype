@@ -54,6 +54,8 @@ export interface IRepository {
   // Workspace Invitations (ST-007)
   createWorkspaceInvitation(workspaceId: string, email: string, role: WorkspaceRole, invitedById: string, token: string, expiresAt: Date): Promise<WorkspaceInvitation>;
   findInvitationByToken(token: string): Promise<WorkspaceInvitation | null>;
+  findWorkspaceInvitationById(workspaceId: string, id: string): Promise<WorkspaceInvitation | null>;
+  updateWorkspaceInvitationToken(id: string, token: string, expiresAt: Date): Promise<void>;
   findWorkspaceInvitations(workspaceId: string): Promise<WorkspaceInvitation[]>;
   revokeWorkspaceInvitation(workspaceId: string, id: string): Promise<void>;
   acceptWorkspaceInvitation(token: string, userId: string): Promise<WorkspaceMember>;
@@ -357,6 +359,21 @@ export class InMemoryRepository implements IRepository {
       if (inv.tokenHash === tokenHash || inv.token === token) return inv;
     }
     return null;
+  }
+
+  async findWorkspaceInvitationById(workspaceId: string, id: string): Promise<WorkspaceInvitation | null> {
+    const inv = this.invitations.get(id);
+    if (!inv || inv.workspaceId !== workspaceId) return null;
+    return inv;
+  }
+
+  async updateWorkspaceInvitationToken(id: string, token: string, expiresAt: Date): Promise<void> {
+    const inv = this.invitations.get(id);
+    if (!inv) throw new Error('Invitation not found');
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+    inv.token = token;
+    inv.tokenHash = tokenHash;
+    inv.expiresAt = expiresAt.toISOString();
   }
 
   async findWorkspaceInvitations(workspaceId: string): Promise<WorkspaceInvitation[]> {
@@ -762,6 +779,7 @@ export class InMemoryRepository implements IRepository {
       updatedAt: now
     };
     this.tables.set(id, table);
+    await this.bumpWorkspaceRevision(workspaceId);
     return table;
   }
 
@@ -776,16 +794,21 @@ export class InMemoryRepository implements IRepository {
       updatedAt: new Date().toISOString()
     };
     this.tables.set(id, updated);
+    await this.bumpWorkspaceRevision(table.workspaceId);
     return updated;
   }
 
   async deleteTable(id: string): Promise<void> {
-    this.tables.delete(id);
-    // Delete cascade rows
-    for (const [rowId, row] of this.tableRows.entries()) {
-      if (row.tableId === id) {
-        this.tableRows.delete(rowId);
+    const table = this.tables.get(id);
+    if (table) {
+      this.tables.delete(id);
+      // Delete cascade rows
+      for (const [rowId, row] of this.tableRows.entries()) {
+        if (row.tableId === id) {
+          this.tableRows.delete(rowId);
+        }
       }
+      await this.bumpWorkspaceRevision(table.workspaceId);
     }
   }
 
@@ -806,6 +829,8 @@ export class InMemoryRepository implements IRepository {
   }
 
   async createTableRow(tableId: string, data: Record<string, any>): Promise<DataTableRow> {
+    const table = this.tables.get(tableId);
+    if (!table) throw new Error('Table not found');
     const id = uuidv4();
     const now = new Date().toISOString();
     const row: DataTableRow = {
@@ -816,10 +841,13 @@ export class InMemoryRepository implements IRepository {
       updatedAt: now
     };
     this.tableRows.set(id, row);
+    await this.bumpWorkspaceRevision(table.workspaceId);
     return row;
   }
 
   async updateTableRow(tableId: string, rowId: string, data: Record<string, any>): Promise<DataTableRow | null> {
+    const table = this.tables.get(tableId);
+    if (!table) throw new Error('Table not found');
     const row = this.tableRows.get(rowId);
     if (!row || row.tableId !== tableId) return null;
     const updated: DataTableRow = {
@@ -828,13 +856,17 @@ export class InMemoryRepository implements IRepository {
       updatedAt: new Date().toISOString()
     };
     this.tableRows.set(rowId, updated);
+    await this.bumpWorkspaceRevision(table.workspaceId);
     return updated;
   }
 
   async deleteTableRow(tableId: string, rowId: string): Promise<boolean> {
+    const table = this.tables.get(tableId);
+    if (!table) return false;
     const row = this.tableRows.get(rowId);
     if (!row || row.tableId !== tableId) return false;
     this.tableRows.delete(rowId);
+    await this.bumpWorkspaceRevision(table.workspaceId);
     return true;
   }
 }

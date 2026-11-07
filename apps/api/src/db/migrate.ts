@@ -32,75 +32,80 @@ async function ensureColumnExists(
   columnName: string,
   columnDefinition: string
 ): Promise<void> {
-  try {
-    const [rows]: any = await connection.query(
-      `SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
-      [tableName, columnName]
-    );
-    if (!rows || rows.length === 0) {
-      console.log(`[Migration] Adding missing column ${tableName}.${columnName}...`);
-      await connection.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${columnDefinition}`);
-    }
-  } catch (err) {
-    // If table doesn't exist yet (e.g. before 0001), ignore and continue
-    console.debug(`[Migration] ensureColumnExists check skipped for ${tableName}.${columnName}:`, (err as any)?.message);
+  const [tables]: any = await connection.query(
+    `SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    [tableName]
+  );
+  if (!tables || tables.length === 0) return;
+
+  const [rows]: any = await connection.query(
+    `SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [tableName, columnName]
+  );
+  if (!rows || rows.length === 0) {
+    console.log(`[Migration] Adding missing column ${tableName}.${columnName}...`);
+    await connection.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${columnDefinition}`);
   }
 }
 
 async function upgradeWorkspaceInvitationsTokenHash(connection: mysql.Connection): Promise<void> {
-  try {
-    const [tables]: any = await connection.query(
-      `SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_invitations'`
-    );
-    if (!tables || tables.length === 0) return;
+  const [tables]: any = await connection.query(
+    `SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_invitations'`
+  );
+  if (!tables || tables.length === 0) return;
 
-    const [cols]: any = await connection.query(
-      `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_invitations'`
-    );
-    const colNames = new Set(Array.isArray(cols) ? cols.map((c: any) => c.COLUMN_NAME) : []);
+  const [cols]: any = await connection.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_invitations'`
+  );
+  const colNames = new Set(Array.isArray(cols) ? cols.map((c: any) => c.COLUMN_NAME) : []);
 
-    if (!colNames.has('token_hash')) {
-      console.log('[Migration] Adding column workspace_invitations.token_hash...');
-      await connection.query(`ALTER TABLE \`workspace_invitations\` ADD COLUMN \`token_hash\` VARCHAR(128) NULL AFTER \`role\``);
+  if (!colNames.has('token_hash')) {
+    console.log('[Migration] Adding column workspace_invitations.token_hash...');
+    await connection.query(`ALTER TABLE \`workspace_invitations\` ADD COLUMN \`token_hash\` VARCHAR(128) NULL AFTER \`role\``);
+  }
+
+  if (colNames.has('token')) {
+    console.log('[Migration] Upgrading active invitation tokens to SHA-256 token_hash...');
+    await connection.query(
+      `UPDATE \`workspace_invitations\` SET \`token_hash\` = SHA2(\`token\`, 256) WHERE (\`token_hash\` IS NULL OR \`token_hash\` = '') AND \`token\` IS NOT NULL`
+    );
+
+    // Verify all active records have valid token_hash before modifying to NOT NULL
+    const [nullCheck]: any = await connection.query(
+      `SELECT COUNT(*) AS unhashed_count FROM \`workspace_invitations\` WHERE \`token_hash\` IS NULL OR \`token_hash\` = ''`
+    );
+    if (Array.isArray(nullCheck) && nullCheck[0]?.unhashed_count > 0) {
+      throw new Error(`[Migration Fatal] ${nullCheck[0].unhashed_count} invitations could not be safely hashed`);
     }
 
-    if (colNames.has('token')) {
-      console.log('[Migration] Upgrading active invitation tokens to SHA-256 token_hash...');
+    await connection.query(
+      `ALTER TABLE \`workspace_invitations\` MODIFY COLUMN \`token_hash\` VARCHAR(128) NOT NULL`
+    );
+
+    const [indices]: any = await connection.query(
+      `SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_invitations' AND COLUMN_NAME = 'token_hash'`
+    );
+    if (!Array.isArray(indices) || indices.length === 0) {
+      console.log('[Migration] Adding unique index idx_invitation_token_hash...');
       await connection.query(
-        `UPDATE \`workspace_invitations\` SET \`token_hash\` = SHA2(\`token\`, 256) WHERE (\`token_hash\` IS NULL OR \`token_hash\` = '') AND \`token\` IS NOT NULL`
+        `ALTER TABLE \`workspace_invitations\` ADD UNIQUE KEY \`idx_invitation_token_hash\` (\`token_hash\`)`
       );
+    }
 
-      await connection.query(
-        `ALTER TABLE \`workspace_invitations\` MODIFY COLUMN \`token_hash\` VARCHAR(128) NOT NULL`
-      );
-
-      const [indices]: any = await connection.query(
-        `SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_invitations' AND COLUMN_NAME = 'token_hash'`
-      );
-      if (!Array.isArray(indices) || indices.length === 0) {
-        console.log('[Migration] Adding unique index idx_invitation_token_hash...');
-        await connection.query(
-          `ALTER TABLE \`workspace_invitations\` ADD UNIQUE KEY \`idx_invitation_token_hash\` (\`token_hash\`)`
-        );
-      }
-
-      const [oldIndices]: any = await connection.query(
-        `SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_invitations' AND COLUMN_NAME = 'token'`
-      );
-      if (Array.isArray(oldIndices)) {
-        for (const idx of oldIndices) {
-          if (idx.INDEX_NAME && idx.INDEX_NAME !== 'PRIMARY') {
-            console.log(`[Migration] Dropping old index ${idx.INDEX_NAME}...`);
-            await connection.query(`ALTER TABLE \`workspace_invitations\` DROP INDEX \`${idx.INDEX_NAME}\``);
-          }
+    const [oldIndices]: any = await connection.query(
+      `SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workspace_invitations' AND COLUMN_NAME = 'token'`
+    );
+    if (Array.isArray(oldIndices)) {
+      for (const idx of oldIndices) {
+        if (idx.INDEX_NAME && idx.INDEX_NAME !== 'PRIMARY') {
+          console.log(`[Migration] Dropping old index ${idx.INDEX_NAME}...`);
+          await connection.query(`ALTER TABLE \`workspace_invitations\` DROP INDEX \`${idx.INDEX_NAME}\``);
         }
       }
-
-      console.log('[Migration] Dropping plaintext token column from workspace_invitations...');
-      await connection.query(`ALTER TABLE \`workspace_invitations\` DROP COLUMN \`token\``);
     }
-  } catch (err: any) {
-    console.debug('[Migration] upgradeWorkspaceInvitationsTokenHash skipped:', err?.message);
+
+    console.log('[Migration] Dropping plaintext token column from workspace_invitations...');
+    await connection.query(`ALTER TABLE \`workspace_invitations\` DROP COLUMN \`token\``);
   }
 }
 
@@ -156,7 +161,12 @@ export async function runMigrations(databaseUrl?: string): Promise<string[]> {
       const sqlContent = fs.readFileSync(filePath, 'utf-8');
 
       if (sqlContent.trim()) {
-        await connection.query(sqlContent);
+        try {
+          await connection.query(sqlContent);
+        } catch (err: any) {
+          console.error(`[Migration Fatal] Failed applying ${file}: ${err.message}`);
+          throw new Error(`Migration ${file} failed: ${err.message}`);
+        }
       }
 
       await connection.query('INSERT INTO schema_migrations (id) VALUES (?)', [file]);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
-import { X, UserPlus, Trash2, Shield, User as UserIcon, Mail, Copy, Check, Clock } from 'lucide-react';
+import { X, UserPlus, Trash2, Shield, User as UserIcon, Mail, Copy, Check, Clock, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface WorkspaceMembersModalProps {
   isOpen: boolean;
@@ -24,7 +24,9 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
   const [newRole, setNewRole] = useState<'admin' | 'editor' | 'viewer'>('editor');
   const [error, setError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
+  const [deliveryNotice, setDeliveryNotice] = useState<{ isSuccess: boolean; text: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
   const canManage = currentUserRole === 'owner' || currentUserRole === 'admin';
@@ -32,6 +34,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
   useEffect(() => {
     if (isOpen && workspaceId) {
       setLastInviteLink(null);
+      setDeliveryNotice(null);
       loadData();
     }
   }, [isOpen, workspaceId]);
@@ -62,17 +65,43 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
 
     setInviting(true);
     setError(null);
+    setDeliveryNotice(null);
     try {
       const res = await api.addWorkspaceMember(workspaceId, newEmail.trim(), newRole);
       if (res.inviteLink) {
         setLastInviteLink(res.inviteLink);
       }
+      setDeliveryNotice({
+        isSuccess: Boolean(res.emailDelivered),
+        text: res.message || (res.emailDelivered ? 'Invitation email delivered successfully.' : 'Email delivery not completed; share the invite link directly.')
+      });
       setNewEmail('');
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to issue invitation');
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleResendInvitation = async (invitationId: string) => {
+    setResendingId(invitationId);
+    setError(null);
+    setDeliveryNotice(null);
+    try {
+      const res = await api.resendWorkspaceInvitation(workspaceId, invitationId);
+      if (res.inviteLink) {
+        setLastInviteLink(res.inviteLink);
+      }
+      setDeliveryNotice({
+        isSuccess: Boolean(res.emailDelivered),
+        text: res.message || (res.emailDelivered ? 'Invitation resent via email.' : 'Invitation link regenerated, but email could not be delivered.')
+      });
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend invitation');
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -171,6 +200,24 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
           </form>
         )}
 
+        {deliveryNotice && (
+          <div style={{
+            marginBottom: 16,
+            padding: '10px 14px',
+            borderRadius: 6,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontSize: 13,
+            background: deliveryNotice.isSuccess ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.12)',
+            color: deliveryNotice.isSuccess ? '#15803d' : '#854d0e',
+            border: `1px solid ${deliveryNotice.isSuccess ? '#bbf7d0' : '#fef08a'}`
+          }}>
+            {deliveryNotice.isSuccess ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+            <span style={{ flex: 1 }}>{deliveryNotice.text}</span>
+          </div>
+        )}
+
         {lastInviteLink && (
           <div style={{
             marginBottom: 20,
@@ -180,7 +227,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
             borderRadius: 8
           }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', marginBottom: 6 }}>
-              Invitation sent! You can also share this direct invite link:
+              Direct invite link (share directly with the recipient):
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
@@ -298,14 +345,26 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleRevokeInvitation(inv.id)}
-                    className="btn btn-ghost btn-sm"
-                    style={{ color: 'var(--danger)', fontSize: 12 }}
-                    title="Revoke invitation"
-                  >
-                    Revoke
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      onClick={() => handleResendInvitation(inv.id)}
+                      disabled={resendingId === inv.id}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: 11, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+                      title="Resend invitation link"
+                    >
+                      <RefreshCw size={11} className={resendingId === inv.id ? 'spin' : ''} />
+                      {resendingId === inv.id ? 'Resending...' : 'Resend'}
+                    </button>
+                    <button
+                      onClick={() => handleRevokeInvitation(inv.id)}
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--danger)', fontSize: 11, padding: '4px 8px' }}
+                      title="Revoke invitation"
+                    >
+                      Revoke
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

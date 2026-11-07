@@ -251,5 +251,73 @@ describe('ST-007: Real Workspace Invitation Lifecycle & Token Verification', () 
     });
     expect(detailsRes.statusCode).toBe(410);
   });
+
+  it('correctly reports email delivery status and allows resending invitations with fresh tokens', async () => {
+    const inviteeEmail = 'resend.target@company.com';
+    const inviteRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceId}/members`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { email: inviteeEmail, role: 'editor' }
+    });
+
+    expect(inviteRes.statusCode).toBe(201);
+    const inviteBody = JSON.parse(inviteRes.body);
+    expect(inviteBody.invitation).toBeDefined();
+    // In dev environment without SMTP, emailDelivered should accurately report false
+    expect(typeof inviteBody.emailDelivered).toBe('boolean');
+    expect(inviteBody.message).toBeDefined();
+    expect(inviteBody.inviteLink).toBeDefined();
+
+    const oldToken = inviteBody.invitation.token;
+    const invitationId = inviteBody.invitation.id;
+
+    // Resend invitation
+    const resendRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceId}/invitations/${invitationId}/resend`,
+      headers: { authorization: `Bearer ${ownerToken}` }
+    });
+
+    expect(resendRes.statusCode).toBe(200);
+    const resendBody = JSON.parse(resendRes.body);
+    expect(resendBody.success).toBe(true);
+    expect(typeof resendBody.emailDelivered).toBe('boolean');
+    expect(resendBody.inviteLink).toBeDefined();
+    expect(resendBody.inviteLink).not.toEqual(inviteBody.inviteLink);
+
+    // Old token must no longer work for details
+    const oldDetailsRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/invitations/details?token=${oldToken}`
+    });
+    expect(oldDetailsRes.statusCode).toBe(404);
+
+    // New token must work and allow acceptance
+    const newToken = resendBody.inviteLink.split('token=')[1];
+    expect(newToken).toBeDefined();
+
+    const recipient = await repo.createUser(inviteeEmail, 'Resend Recipient');
+    const recipientToken = await authService.createSessionForUser(recipient.id);
+
+    const acceptRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/invitations/accept',
+      headers: { authorization: `Bearer ${recipientToken}` },
+      payload: { token: newToken }
+    });
+
+    expect(acceptRes.statusCode).toBe(200);
+    expect(JSON.parse(acceptRes.body).success).toBe(true);
+
+    // Resending an accepted invitation must fail with 400
+    const resendAcceptedRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceId}/invitations/${invitationId}/resend`,
+      headers: { authorization: `Bearer ${ownerToken}` }
+    });
+    expect(resendAcceptedRes.statusCode).toBe(400);
+    expect(JSON.parse(resendAcceptedRes.body).error).toContain('already accepted');
+  });
 });
 

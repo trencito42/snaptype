@@ -1,6 +1,8 @@
 import { ReverseShortcutMatcher, renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
 import { DomDetector, TextInserter, BrowserApi } from '@snaptype/browser-compat';
-import { Snippet, UserPreferences, DEFAULT_PREFERENCES, DynamicFormField, DataTable } from '@snaptype/shared';
+import { Snippet, UserPreferences, DEFAULT_PREFERENCES, DynamicFormField, DataTable, validateDashboardMessage } from '@snaptype/shared';
+
+declare const __SNAPTYPE_APP_URL__: string;
 
 /**
  * Checks whether a snippet is allowed to expand on the current domain (ST-012)
@@ -120,15 +122,26 @@ export class ContentEngine {
     document.addEventListener('keydown', (e) => this.handleKeyDown(e), true);
     document.addEventListener('input', (e) => this.handleInput(e), true);
 
-    // Dashboard workspace synchronization bridge (ST-037 / Blocker 2)
+    // Dashboard workspace synchronization bridge (ST-037 / Blocker 2 / Issue 5)
     window.addEventListener('message', (event) => {
       if (event.source !== window) return;
-      if (event.data?.type === 'SNAPTYPE_DASHBOARD_WORKSPACE_CHANGE' && event.data.workspaceId) {
-        BrowserApi.sendMessage({
-          action: 'SELECT_WORKSPACE',
-          workspaceId: event.data.workspaceId
-        }).catch(() => {});
+
+      const configuredAppUrl = typeof __SNAPTYPE_APP_URL__ !== 'undefined' ? __SNAPTYPE_APP_URL__ : undefined;
+      const validation = validateDashboardMessage(
+        event.data,
+        event.origin,
+        window.location.origin,
+        configuredAppUrl
+      );
+
+      if (!validation.valid) {
+        return;
       }
+
+      BrowserApi.sendMessage({
+        action: 'SELECT_WORKSPACE',
+        workspaceId: validation.message.workspaceId
+      }).catch(() => {});
     });
 
     // Runtime messages from background (e.g. open assistant hotkey or popup insert)

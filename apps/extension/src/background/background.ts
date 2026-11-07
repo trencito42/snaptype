@@ -1,4 +1,4 @@
-import { Snippet, UserPreferences, DEFAULT_PREFERENCES, SyncResponse, DataTable } from '@snaptype/shared';
+import { Snippet, UserPreferences, DEFAULT_PREFERENCES, SyncResponse, DataTable, isValidWorkspaceId } from '@snaptype/shared';
 import { BrowserApi } from '@snaptype/browser-compat';
 
 declare const __SNAPTYPE_API_URL__: string;
@@ -288,7 +288,35 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
       }
 
       case 'SELECT_WORKSPACE': {
-        state.currentWorkspaceId = message.workspaceId || null;
+        const targetWsId = message.workspaceId;
+        if (!targetWsId || typeof targetWsId !== 'string' || !isValidWorkspaceId(targetWsId)) {
+          return { success: false, error: 'Invalid workspace ID format' };
+        }
+
+        // If not authenticated, cannot select workspace
+        if (!state.token) {
+          return { success: false, error: 'Not authenticated' };
+        }
+
+        // Ensure state.workspaces is loaded
+        if (state.workspaces.length === 0) {
+          await fetchWorkspaces();
+        }
+
+        // Verify that the requested workspace belongs to the user
+        let authorized = state.workspaces.some((ws) => ws.id === targetWsId);
+        if (!authorized) {
+          // Re-fetch workspaces from server in case user was just added or created a workspace
+          await fetchWorkspaces();
+          authorized = state.workspaces.some((ws) => ws.id === targetWsId);
+        }
+
+        if (!authorized) {
+          console.warn(`[SnapType Background] Blocked unauthorized workspace switch attempt to: ${targetWsId}`);
+          return { success: false, error: 'Unauthorized: workspace does not exist or user lacks access' };
+        }
+
+        state.currentWorkspaceId = targetWsId;
         state.snippets = [];
         state.tables = [];
         state.currentRevision = 0;
