@@ -45,6 +45,11 @@ jobs:
       - name: Run Complete Test Suite (Unit, Integration & Performance Benchmarks)
         run: npm test
 
+      - name: API smoke test against real MySQL (service container, throw-away data)
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/snaptype_db
+        run: node scripts/ci/api-smoke.mjs
+
       - name: Build Web Application
         run: npm run build:web
 

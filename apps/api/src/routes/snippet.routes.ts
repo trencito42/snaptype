@@ -76,7 +76,7 @@ export async function snippetRoutes(
       const snippet = await snippetService.createSnippet(workspaceId, user.id, parsed.data);
       return reply.status(201).send({ snippet });
     } catch (err: any) {
-      return reply.status(400).send({ error: err.message });
+      return reply.status(/^unauthorized/i.test(err.message) ? 403 : 400).send({ error: err.message });
     }
   });
 
@@ -94,7 +94,7 @@ export async function snippetRoutes(
       const updated = await snippetService.updateSnippet(id, user.id, parsed.data);
       return { snippet: updated };
     } catch (err: any) {
-      const statusCode = err.statusCode || (err.message === 'Snippet not found' ? 404 : 400);
+      const statusCode = err.statusCode || (err.message === 'Snippet not found' ? 404 : /^unauthorized/i.test(err.message) ? 403 : 400);
       return reply.status(statusCode).send({ error: err.message });
     }
   });

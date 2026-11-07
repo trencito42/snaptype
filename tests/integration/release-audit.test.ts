@@ -166,3 +166,19 @@ describe('Release audit: import/export fidelity (RB-012)', () => {
     expect(res.failed[0].shortcut).toBe('has space');
   });
 });
+
+import { ImportSnippetsSchema } from '../../packages/shared/src/schemas.js';
+
+describe('Release audit: a native export is accepted by the import schema (RB-024)', () => {
+  it('accepts exports containing null folderId/richContent/description and extra server fields', async () => {
+    const repo = new InMemoryRepository();
+    const svc = new SnippetService(repo);
+    const u = await repo.createUser('null@example.test', 'N');
+    const ws = await repo.createWorkspace('W', 'w-null', u.id, true);
+    await repo.createSnippet(ws.id, { name: 'a', shortcut: 'aa', plainContent: 'A', tags: [] } as any, u.id);
+    const exported = JSON.parse(JSON.stringify(await svc.exportWorkspace(ws.id, u.id)));
+    expect(exported.snippets[0].folderId).toBeNull();
+    const parsed = ImportSnippetsSchema.safeParse({ snippets: exported.snippets, folders: exported.folders, format: 'snaptype_json' });
+    expect(parsed.success, JSON.stringify(parsed.success ? '' : parsed.error.flatten())).toBe(true);
+  });
+});
