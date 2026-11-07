@@ -9,15 +9,18 @@ Base commit of this work: `c9db21f`. Work is committed directly to `main`; see `
 - Real Chrome 157 run of the actual extension: 33/33 checks (login via extension, sync, include/calc/table/conditional, expansion in textarea/input/contenteditable, password field skipped, server edit propagates, dynamic form/cancel/submit, date command, 409 conflict, workspace isolation, invitation, revocation clears cache, logout clears storage).
 - Security/data fixes with regression tests: cross-workspace folder refs, invitation role escalation, admin limits, atomic invitation acceptance (code), OTP SMTP-failure lockout, auth rate limits, proxy IP handling, sync rollback/full-replace/stale responses, import/export fidelity.
 - Homepage rebuilt: Lighthouse mobile 100/100/100/100 (perf/a11y/best-practices/SEO), desktop 90/100/100/100 after the contrast fix; no overflow at 320-1440 px; real-engine demo.
-- Dashboard usable on phones (single-pane navigation, modals fit).
+- Dashboard usable on phones (single-pane navigation, modals fit). Native alert/confirm replaced by in-app dialogs (delete-snippet flow checked in the browser).
+- `scripts/ci/api-smoke.mjs` (35 checks: auth, isolation, folders, conflicts, tombstone sync, concurrent invitation acceptance, ownership transfer, tables, export->import) passes locally on the in-memory repository and is wired to run against MySQL in CI (confirm green).
+- Ownership transfer implemented (API, both repositories, UI) so owners can leave shared workspaces; invitation emails HTML-escaped; native export is re-importable.
+- Firefox production package passes Mozilla's `web-ext lint` (0 errors/0 warnings).
 - Docs cleaned: unverified reports removed; README/TESTING/PERFORMANCE rewritten honestly.
 
 ## Open items (priority order)
 1. **Firefox runtime is NOT TESTED** (no Firefox here). Manifest/ID/permissions are checked by tests only. Needs `web-ext run` or a Firefox CI job. (RB-007)
-2. Real-MySQL coverage beyond the upgrade script: atomic invitation acceptance, interrupted-DDL retry, repository parity. (RB-004)
+2. Real-MySQL: the smoke test must be confirmed green on CI (atomic invitation claim, tombstones, ownership transfer run there for the first time); interrupted-DDL retry still untested. (RB-004, RB-027)
 3. Audit still pending: account deletion with shared workspaces, Data Table concurrency/scale, revision restore, session rotation, log hygiene, role-change endpoint. (RB-020)
 4. Extension bridge origin allow-list hard-codes `snaptype.app`; derive from configured URL. (RB-019)
-5. Dashboard polish: replace native `alert/confirm`; keyboard/a11y pass on dashboard. (RB-018)
+5. Dashboard keyboard/a11y pass and manual UI checks of folders, data tables, import/export, settings, team screens. (RB-018 done)
 6. Homepage: canonical URL, sitemap, social image, approved logo (see blockers).
 7. Not measured: extension idle CPU/memory, keystroke latency in pages, startup time (see `PERFORMANCE.md`).
 8. Browser editor matrix (rich-text editors, React controlled inputs, iframes, shadow DOM) not tested; do not claim compatibility.
