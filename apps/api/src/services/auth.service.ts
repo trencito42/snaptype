@@ -110,8 +110,11 @@ export class AuthService {
       };
     }
 
-    // Mark challenge as used
-    await this.repo.markChallengeVerified(challenge.id);
+    // Atomically mark challenge as used (ST-029)
+    const claimed = await this.repo.markChallengeVerified(challenge.id);
+    if (!claimed) {
+      return { success: false, error: 'This verification code has already been used. Please request a new code.' };
+    }
 
     // Find or create user
     let user = await this.repo.findUserByEmail(normalizedEmail);
@@ -141,6 +144,14 @@ export class AuthService {
       user,
       isNewUser
     };
+  }
+
+  public async createSessionForUser(userId: string, metadata?: { userAgent?: string; ipAddress?: string }): Promise<string> {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = this.hashSessionToken(rawToken);
+    const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+    await this.repo.createSession(userId, tokenHash, expiresAt, metadata?.userAgent, metadata?.ipAddress);
+    return rawToken;
   }
 
   public async completeRegistration(userId: string, name: string): Promise<User> {

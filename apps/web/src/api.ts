@@ -94,6 +94,18 @@ class ApiClient {
     return this.request<{ user: User; workspaces: { workspace: Workspace; role: string }[]; preferences: UserPreferences }>('/me');
   }
 
+  // Workspaces (ST-037)
+  public async getWorkspaces() {
+    return this.request<{ workspaces: { workspace: Workspace; role: string }[] }>('/workspaces');
+  }
+
+  public async createWorkspace(data: { name: string }) {
+    return this.request<{ workspace: Workspace }>('/workspaces', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
   // Folders
   public async getFolders(workspaceId?: string) {
     const qs = workspaceId ? `?workspaceId=${workspaceId}` : '';

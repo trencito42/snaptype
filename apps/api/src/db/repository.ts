@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 const uuidv4 = () => crypto.randomUUID();
-import { User, Workspace, WorkspaceMember, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES, DataTable, DataTableColumn, DataTableRow } from '@snaptype/shared';
+import { User, Workspace, WorkspaceMember, WorkspaceInvitation, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES, DataTable, DataTableColumn, DataTableRow } from '@snaptype/shared';
 
 export interface VerificationChallengeRecord {
   id: string;
@@ -34,7 +34,7 @@ export interface IRepository {
   createEmailChallenge(email: string, hashedCode: string, expiresAt: Date): Promise<VerificationChallengeRecord>;
   findLatestChallenge(email: string): Promise<VerificationChallengeRecord | null>;
   incrementChallengeAttempts(id: string): Promise<void>;
-  markChallengeVerified(id: string): Promise<void>;
+  markChallengeVerified(id: string): Promise<boolean>;
 
   // Sessions
   createSession(userId: string, tokenHash: string, expiresAt: Date, userAgent?: string | null, ipAddress?: string | null): Promise<SessionRecord>;
@@ -51,6 +51,13 @@ export interface IRepository {
   addWorkspaceMember(workspaceId: string, userId: string, role: WorkspaceRole): Promise<WorkspaceMember>;
   removeWorkspaceMember(workspaceId: string, userId: string): Promise<void>;
 
+  // Workspace Invitations (ST-007)
+  createWorkspaceInvitation(workspaceId: string, email: string, role: WorkspaceRole, invitedById: string, token: string, expiresAt: Date): Promise<WorkspaceInvitation>;
+  findInvitationByToken(token: string): Promise<WorkspaceInvitation | null>;
+  findWorkspaceInvitations(workspaceId: string): Promise<WorkspaceInvitation[]>;
+  revokeWorkspaceInvitation(id: string): Promise<void>;
+  acceptWorkspaceInvitation(token: string, userId: string): Promise<WorkspaceMember>;
+
   // Folders
   findFolders(workspaceId: string): Promise<Folder[]>;
   findFolderById(id: string): Promise<Folder | null>;
@@ -63,7 +70,7 @@ export interface IRepository {
   findSnippetById(id: string): Promise<Snippet | null>;
   findSnippetByShortcut(workspaceId: string, shortcut: string): Promise<Snippet | null>;
   createSnippet(workspaceId: string, data: Partial<Snippet>, createdById?: string): Promise<Snippet>;
-  updateSnippet(id: string, data: Partial<Snippet>, updatedById?: string): Promise<Snippet>;
+  updateSnippet(id: string, data: Partial<Snippet>, updatedById?: string, expectedVersion?: number): Promise<Snippet>;
   deleteSnippet(id: string): Promise<void>;
   incrementSnippetUsage(id: string): Promise<void>;
   findSnippetRevisions(snippetId: string): Promise<SnippetRevision[]>;
@@ -90,9 +97,10 @@ export interface IRepository {
   updateTable(id: string, data: Partial<{ name: string; description?: string | null; columns: DataTableColumn[] }>): Promise<DataTable>;
   deleteTable(id: string): Promise<void>;
   findTableRows(tableId: string): Promise<DataTableRow[]>;
+  findTableRowById(tableId: string, rowId: string): Promise<DataTableRow | null>;
   createTableRow(tableId: string, data: Record<string, any>): Promise<DataTableRow>;
-  updateTableRow(id: string, data: Record<string, any>): Promise<DataTableRow>;
-  deleteTableRow(id: string): Promise<void>;
+  updateTableRow(tableId: string, rowId: string, data: Record<string, any>): Promise<DataTableRow | null>;
+  deleteTableRow(tableId: string, rowId: string): Promise<boolean>;
 }
 
 /**
@@ -112,6 +120,7 @@ export class InMemoryRepository implements IRepository {
   private workspaceRevisions = new Map<string, number>();
   private tables = new Map<string, DataTable>();
   private tableRows = new Map<string, DataTableRow>();
+  private invitations = new Map<string, WorkspaceInvitation>();
 
   // Tracking deleted items for revision-based synchronization
   private deletedSnippets: { id: string; workspaceId: string; revision: number }[] = [];
@@ -184,9 +193,11 @@ export class InMemoryRepository implements IRepository {
     if (ch) ch.attempts++;
   }
 
-  async markChallengeVerified(id: string): Promise<void> {
+  async markChallengeVerified(id: string): Promise<boolean> {
     const ch = this.challenges.find((c) => c.id === id);
-    if (ch) ch.verifiedAt = new Date();
+    if (!ch || ch.verifiedAt) return false;
+    ch.verifiedAt = new Date();
+    return true;
   }
 
   async createSession(userId: string, tokenHash: string, expiresAt: Date, userAgent?: string | null, ipAddress?: string | null): Promise<SessionRecord> {
@@ -308,6 +319,73 @@ export class InMemoryRepository implements IRepository {
     }
   }
 
+  async createWorkspaceInvitation(
+    workspaceId: string,
+    email: string,
+    role: WorkspaceRole,
+    invitedById: string,
+    token: string,
+    expiresAt: Date
+  ): Promise<WorkspaceInvitation> {
+    const id = uuidv4();
+    const inv: WorkspaceInvitation = {
+      id,
+      workspaceId,
+      email: email.toLowerCase().trim(),
+      role,
+      token,
+      invitedById,
+      expiresAt: expiresAt.toISOString(),
+      acceptedAt: null,
+      revokedAt: null,
+      createdAt: new Date().toISOString()
+    };
+    this.invitations.set(id, inv);
+    return inv;
+  }
+
+  async findInvitationByToken(token: string): Promise<WorkspaceInvitation | null> {
+    for (const inv of this.invitations.values()) {
+      if (inv.token === token) return inv;
+    }
+    return null;
+  }
+
+  async findWorkspaceInvitations(workspaceId: string): Promise<WorkspaceInvitation[]> {
+    const list: WorkspaceInvitation[] = [];
+    const now = new Date();
+    for (const inv of this.invitations.values()) {
+      if (inv.workspaceId === workspaceId && !inv.acceptedAt && !inv.revokedAt && new Date(inv.expiresAt) > now) {
+        list.push(inv);
+      }
+    }
+    return list;
+  }
+
+  async revokeWorkspaceInvitation(id: string): Promise<void> {
+    const inv = this.invitations.get(id);
+    if (inv) {
+      inv.revokedAt = new Date().toISOString();
+    }
+  }
+
+  async acceptWorkspaceInvitation(token: string, userId: string): Promise<WorkspaceMember> {
+    const inv = await this.findInvitationByToken(token);
+    if (!inv) throw new Error('Invitation not found');
+    if (inv.revokedAt) throw new Error('Invitation has been revoked');
+    if (inv.acceptedAt) throw new Error('Invitation has already been accepted');
+    if (new Date(inv.expiresAt) < new Date()) throw new Error('Invitation has expired');
+
+    const user = await this.findUserById(userId);
+    if (!user) throw new Error('User not found');
+    if (user.email.toLowerCase().trim() !== inv.email.toLowerCase().trim()) {
+      throw new Error('This invitation was sent to a different email address');
+    }
+
+    inv.acceptedAt = new Date().toISOString();
+    return this.addWorkspaceMember(inv.workspaceId, userId, inv.role);
+  }
+
   async findFolders(workspaceId: string): Promise<Folder[]> {
     const result: Folder[] = [];
     for (const f of this.folders.values()) {
@@ -374,6 +452,14 @@ export class InMemoryRepository implements IRepository {
       if (s.folderId === id) {
         s.folderId = null;
         s.updatedAt = new Date().toISOString();
+      }
+    }
+
+    // Detach child folders (ST-032)
+    for (const f of this.folders.values()) {
+      if (f.parentId === id) {
+        f.parentId = null;
+        f.updatedAt = new Date().toISOString();
       }
     }
 
@@ -465,9 +551,15 @@ export class InMemoryRepository implements IRepository {
     return snippet;
   }
 
-  async updateSnippet(id: string, data: Partial<Snippet>, updatedById?: string): Promise<Snippet> {
+  async updateSnippet(id: string, data: Partial<Snippet>, updatedById?: string, expectedVersion?: number): Promise<Snippet> {
     const snippet = this.snippets.get(id);
     if (!snippet || snippet.deletedAt) throw new Error('Snippet not found');
+
+    if (expectedVersion !== undefined && snippet.version !== expectedVersion) {
+      const err = new Error(`Conflict: snippet was modified by another session (expected version ${expectedVersion}, current version is ${snippet.version}).`);
+      (err as any).statusCode = 409;
+      throw err;
+    }
 
     if (data.name !== undefined) snippet.name = data.name;
     if (data.shortcut !== undefined) snippet.shortcut = data.shortcut;
@@ -699,6 +791,12 @@ export class InMemoryRepository implements IRepository {
     return rows;
   }
 
+  async findTableRowById(tableId: string, rowId: string): Promise<DataTableRow | null> {
+    const row = this.tableRows.get(rowId);
+    if (!row || row.tableId !== tableId) return null;
+    return row;
+  }
+
   async createTableRow(tableId: string, data: Record<string, any>): Promise<DataTableRow> {
     const id = uuidv4();
     const now = new Date().toISOString();
@@ -713,19 +811,22 @@ export class InMemoryRepository implements IRepository {
     return row;
   }
 
-  async updateTableRow(id: string, data: Record<string, any>): Promise<DataTableRow> {
-    const row = this.tableRows.get(id);
-    if (!row) throw new Error('Row not found');
+  async updateTableRow(tableId: string, rowId: string, data: Record<string, any>): Promise<DataTableRow | null> {
+    const row = this.tableRows.get(rowId);
+    if (!row || row.tableId !== tableId) return null;
     const updated: DataTableRow = {
       ...row,
       data: { ...row.data, ...data },
       updatedAt: new Date().toISOString()
     };
-    this.tableRows.set(id, updated);
+    this.tableRows.set(rowId, updated);
     return updated;
   }
 
-  async deleteTableRow(id: string): Promise<void> {
-    this.tableRows.delete(id);
+  async deleteTableRow(tableId: string, rowId: string): Promise<boolean> {
+    const row = this.tableRows.get(rowId);
+    if (!row || row.tableId !== tableId) return false;
+    this.tableRows.delete(rowId);
+    return true;
   }
 }

@@ -83,6 +83,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <Shield size={15} /> Privacy
         </button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => onNavigate('terms')}
+          style={{ color: currentView === 'terms' ? 'var(--ink)' : 'var(--text-secondary)' }}
+        >
+          Terms
+        </button>
       </nav>
 
       {/* Action CTA */}

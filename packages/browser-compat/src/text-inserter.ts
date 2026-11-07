@@ -8,6 +8,11 @@ export interface InsertionOptions {
 
 export class TextInserter {
   /**
+   * Guard flag preventing SnapType's own synthetic events from retriggering keystroke buffers (ST-016)
+   */
+  public static isProgrammaticInsert: boolean = false;
+
+  /**
    * Dispatches synthetic events expected by React, Vue, Angular, etc.
    */
   private static dispatchInputEvents(element: HTMLElement, insertedText: string): void {
@@ -19,6 +24,7 @@ export class TextInserter {
         inputType: 'insertReplacementText',
         data: insertedText
       });
+      (beforeInputEvent as any).__snaptype_synthetic = true;
       element.dispatchEvent(beforeInputEvent);
     } catch {
       // InputEvent might be restricted in some browser contexts
@@ -31,12 +37,17 @@ export class TextInserter {
         inputType: 'insertReplacementText',
         data: insertedText
       });
+      (inputEvent as any).__snaptype_synthetic = true;
       element.dispatchEvent(inputEvent);
     } catch {
-      element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      const fallbackEvent = new Event('input', { bubbles: true, composed: true });
+      (fallbackEvent as any).__snaptype_synthetic = true;
+      element.dispatchEvent(fallbackEvent);
     }
 
-    element.dispatchEvent(new Event('change', { bubbles: true }));
+    const changeEvent = new Event('change', { bubbles: true });
+    (changeEvent as any).__snaptype_synthetic = true;
+    element.dispatchEvent(changeEvent);
   }
 
   /**
@@ -168,15 +179,24 @@ export class TextInserter {
       return false;
     }
 
-    if (inspected.category === 'input' || inspected.category === 'textarea') {
-      return this.insertIntoInput(element as HTMLInputElement | HTMLTextAreaElement, options);
-    }
+    try {
+      TextInserter.isProgrammaticInsert = true;
 
-    if (inspected.category === 'contenteditable') {
-      return this.insertIntoContentEditable(element, options);
-    }
+      if (inspected.category === 'input' || inspected.category === 'textarea') {
+        return this.insertIntoInput(element as HTMLInputElement | HTMLTextAreaElement, options);
+      }
 
-    return false;
+      if (inspected.category === 'contenteditable') {
+        return this.insertIntoContentEditable(element, options);
+      }
+
+      return false;
+    } finally {
+      // Clear programmatic flag asynchronously so microtasks/event loops complete
+      setTimeout(() => {
+        TextInserter.isProgrammaticInsert = false;
+      }, 0);
+    }
   }
 }
 

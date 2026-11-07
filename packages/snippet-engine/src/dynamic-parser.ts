@@ -14,11 +14,15 @@ export interface RenderContext {
   tableResolver?: (tableName: string, lookupKey: string, lookupVal: any, targetCol: string) => string | null;
   currentDate?: Date;
   depth?: number;
+  preserveUnresolvedVariables?: boolean;
+  strictVariables?: boolean;
 }
 
 export interface RenderResult {
   text: string;
   cursorOffset: number; // -1 if not specified
+  errors?: string[];
+  warnings?: string[];
 }
 
 const formulaEvaluator = new SafeFormulaEvaluator();
@@ -57,13 +61,14 @@ function parseAttributes(rawParams: string): Record<string, string> {
 
 /**
  * Extract dynamic interactive fields that require user input before snippet insertion.
+ * Supports both unified `{{form:name|type=...}}` and legacy `{{input:name}}`, `{{paragraph:name}}`, etc.
  */
 export function extractFormFields(template: string): DynamicFormField[] {
   const fields: Map<string, DynamicFormField> = new Map();
   if (!template) return [];
 
   // Match {{type:name ...}}
-  const tagRegex = /\{\{\s*(input|paragraph|dropdown|toggle|datepicker|date_field):([a-zA-Z0-9_]+)(.*?)\}\}/g;
+  const tagRegex = /\{\{\s*(input|paragraph|dropdown|toggle|datepicker|date_field|form):([a-zA-Z0-9_]+)(.*?)\}\}/gi;
   let match: RegExpExecArray | null;
 
   while ((match = tagRegex.exec(template)) !== null) {
@@ -77,10 +82,22 @@ export function extractFormFields(template: string): DynamicFormField[] {
     }
 
     let type: DynamicFormField['type'] = 'text';
-    if (rawType === 'paragraph') type = 'paragraph';
-    else if (rawType === 'dropdown') type = 'dropdown';
-    else if (rawType === 'toggle') type = 'toggle';
-    else if (rawType === 'datepicker' || rawType === 'date_field') type = 'date';
+    if (rawType === 'form') {
+      const formType = (attrs['type'] || '').toLowerCase();
+      if (formType === 'paragraph' || formType === 'textarea') type = 'paragraph';
+      else if (formType === 'dropdown' || formType === 'select' || attrs['options']) type = 'dropdown';
+      else if (formType === 'toggle' || formType === 'checkbox') type = 'toggle';
+      else if (formType === 'date' || formType === 'datepicker') type = 'date';
+      else type = 'text';
+    } else if (rawType === 'paragraph') {
+      type = 'paragraph';
+    } else if (rawType === 'dropdown') {
+      type = 'dropdown';
+    } else if (rawType === 'toggle') {
+      type = 'toggle';
+    } else if (rawType === 'datepicker' || rawType === 'date_field') {
+      type = 'date';
+    }
 
     let options: string[] | undefined;
     if (type === 'dropdown') {
@@ -107,16 +124,84 @@ export function extractFormFields(template: string): DynamicFormField[] {
 }
 
 /**
+ * Validates a snippet template against the unified command grammar.
+ */
+export function validateSnippetTemplate(template: string): { valid: boolean; errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!template) return { valid: true, errors, warnings };
+
+  // 1. Check matching block directives
+  const repeatOpens = (template.match(/\{\{#repeat\s+/g) || []).length;
+  const repeatCloses = (template.match(/\{\{\/repeat\}\}/g) || []).length;
+  if (repeatOpens !== repeatCloses) {
+    errors.push(`Mismatched repeat blocks: ${repeatOpens} open directive(s), ${repeatCloses} close directive(s).`);
+  }
+
+  const ifOpens = (template.match(/\{\{#if\s+/g) || []).length;
+  const ifCloses = (template.match(/\{\{\/if\}\}/g) || []).length;
+  if (ifOpens !== ifCloses) {
+    errors.push(`Mismatched if blocks: ${ifOpens} open directive(s), ${ifCloses} close directive(s).`);
+  }
+
+  // 2. Validate inline tags
+  const inlineRegex = /\{\{([^}]+)\}\}/g;
+  let match;
+  while ((match = inlineRegex.exec(template)) !== null) {
+    const raw = match[1].trim();
+    if (raw.startsWith('#') || raw.startsWith('/')) continue; // Handled by block checks
+
+    const lower = raw.toLowerCase();
+    const isKnown =
+      lower === 'cursor' ||
+      lower === 'clipboard' ||
+      lower === 'selection' ||
+      lower === 'selected_text' ||
+      lower === 'selectedtext' ||
+      lower.startsWith('note:') ||
+      lower.startsWith('//') ||
+      lower.startsWith('site:') ||
+      lower.startsWith('url:') ||
+      lower.startsWith('set:') ||
+      lower.startsWith('formula:') ||
+      lower.startsWith('calc:') ||
+      lower.startsWith('date') ||
+      lower.startsWith('time') ||
+      lower.startsWith('snippet:') ||
+      lower.startsWith('include:') ||
+      lower.startsWith('table:') ||
+      /^(form|input|paragraph|dropdown|toggle|datepicker|date_field):/i.test(lower) ||
+      /^[a-zA-Z0-9_]+$/.test(raw);
+
+    if (!isKnown) {
+      warnings.push(`Unrecognized or non-standard command: {{${raw}}}`);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+/**
  * Render dynamic snippet template into final plain text with cursor location calculation.
+ * Never silently deletes unresolved commands or missing lookups without visible diagnostic reporting.
  */
 export function renderSnippet(template: string, context: RenderContext = {}): RenderResult {
   if (!template) {
-    return { text: '', cursorOffset: -1 };
+    return { text: '', cursorOffset: -1, errors: [], warnings: [] };
   }
+
+  const errors: string[] = [];
+  const warnings: string[] = [];
 
   const depth = context.depth || 0;
   if (depth > MAX_INCLUDE_DEPTH) {
-    return { text: '[Circular or excessive nested snippet]', cursorOffset: -1 };
+    const msg = '[Circular or excessive nested snippet]';
+    return { text: msg, cursorOffset: -1, errors: [msg] };
   }
 
   const vars: Record<string, any> = { ...(context.variables || {}) };
@@ -127,7 +212,6 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
   let processed = processBlocks(template, vars, context);
 
   // 2. Tokenize and replace inline tags
-  // Regex matches {{...}}
   const inlineRegex = /\{\{([^}]+)\}\}/g;
 
   const result = processed.replace(inlineRegex, (_match, content: string) => {
@@ -138,19 +222,23 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
       return '__SNAPTYPE_CURSOR_MARKER__';
     }
 
-    // Notes: remove completely
+    // Notes: remove completely (intended internal agent guidance)
     if (raw.toLowerCase().startsWith('note:') || raw.toLowerCase().startsWith('//')) {
       return '';
     }
 
     // Clipboard
     if (raw.toLowerCase() === 'clipboard') {
-      return context.clipboardText || '';
+      return context.clipboardText !== undefined ? context.clipboardText : '';
     }
 
-    // Selected text
-    if (raw.toLowerCase() === 'selection' || raw.toLowerCase() === 'selected_text') {
-      return context.selectedText || '';
+    // Selected text (supports selection, selected_text, selectedText)
+    if (
+      raw.toLowerCase() === 'selection' ||
+      raw.toLowerCase() === 'selected_text' ||
+      raw.toLowerCase() === 'selectedtext'
+    ) {
+      return context.selectedText !== undefined ? context.selectedText : '';
     }
 
     // Site / Website Context
@@ -168,7 +256,6 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
       if (eq !== -1) {
         const k = expr.slice(0, eq).trim();
         const v = expr.slice(eq + 1).trim();
-        // Check if v is expression or string
         vars[k] = formulaEvaluator.evaluate(v, vars) ?? v;
       }
       return '';
@@ -177,11 +264,17 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
     // Safe Formula / Calculation: {{formula: expr}} or {{calc: expr}}
     if (raw.toLowerCase().startsWith('formula:') || raw.toLowerCase().startsWith('calc:')) {
       const expr = raw.slice(raw.indexOf(':') + 1).trim();
-      const evaluated = formulaEvaluator.evaluate(expr, vars);
-      return evaluated !== undefined && evaluated !== null ? String(evaluated) : '';
+      try {
+        const evaluated = formulaEvaluator.evaluate(expr, vars);
+        return evaluated !== undefined && evaluated !== null ? String(evaluated) : '';
+      } catch (e: any) {
+        const errMsg = `[Calc Error: ${e.message || expr}]`;
+        errors.push(errMsg);
+        return errMsg;
+      }
     }
 
-    // Date / Time tags
+    // Date / Time tags (including advertised {{datetime}})
     if (raw.toLowerCase().startsWith('date') || raw.toLowerCase().startsWith('time')) {
       return handleDateTag(raw, now);
     }
@@ -191,16 +284,24 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
       const shortcut = raw.slice(raw.indexOf(':') + 1).trim();
       if (context.snippetResolver) {
         const includedContent = context.snippetResolver(shortcut);
-        if (includedContent) {
+        if (includedContent !== null && includedContent !== undefined) {
           const nested = renderSnippet(includedContent, {
             ...context,
             variables: vars,
             depth: depth + 1
           });
+          if (nested.errors && nested.errors.length > 0) {
+            errors.push(...nested.errors);
+          }
           return nested.text;
         }
+        const notFound = `[Include Error: snippet '${shortcut}' not found]`;
+        errors.push(notFound);
+        return notFound;
       }
-      return '';
+      const noResolver = `[Include Error: resolver unavailable for '${shortcut}']`;
+      errors.push(noResolver);
+      return noResolver;
     }
 
     // Table lookup: {{table:tableName|lookup=key|value=val|column=targetCol}}
@@ -222,11 +323,21 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
         const val = context.tableResolver(tableName, lookupKey, lookupVal, targetCol);
         if (val !== null && val !== undefined) return String(val);
       }
-      return attrs['default'] || '';
+      if (attrs['default'] !== undefined) {
+        return attrs['default'];
+      }
+      if (!context.tableResolver) {
+        const err = `[Table Error: resolver unavailable for table '${tableName}']`;
+        errors.push(err);
+        return err;
+      }
+      const err = `[Table Error: row not found in '${tableName}' for ${lookupKey}='${lookupVal}']`;
+      errors.push(err);
+      return err;
     }
 
-    // Interactive field tags: {{input:name...}}, {{paragraph:name...}}, {{dropdown:name...}}, etc.
-    const fieldMatch = raw.match(/^(input|paragraph|dropdown|toggle|datepicker|date_field):([a-zA-Z0-9_]+)(.*)$/i);
+    // Interactive field tags: {{form:name...}}, {{input:name...}}, {{paragraph:name...}}, etc.
+    const fieldMatch = raw.match(/^(input|paragraph|dropdown|toggle|datepicker|date_field|form):([a-zA-Z0-9_]+)(.*)$/i);
     if (fieldMatch) {
       const name = fieldMatch[2];
       const rawAttrs = fieldMatch[3] || '';
@@ -235,7 +346,11 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
       if (Object.prototype.hasOwnProperty.call(vars, name)) {
         return String(vars[name] ?? '');
       }
-      return attrs['default'] || '';
+      if (attrs['default'] !== undefined) {
+        return attrs['default'];
+      }
+      // If variable not filled in form, preserve or show indicator rather than silent deletion
+      return `[Unfilled: ${name}]`;
     }
 
     // Plain variable interpolation: {{variableName}}
@@ -243,8 +358,21 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
       return String(vars[raw] ?? '');
     }
 
-    // If unknown or formula shorthand
-    return '';
+    // Variable identifier without value provided
+    if (/^[a-zA-Z0-9_]+$/.test(raw)) {
+      if (context.preserveUnresolvedVariables) {
+        return `{{${raw}}}`;
+      }
+      warnings.push(`Unresolved variable: {{${raw}}}`);
+      if (context.strictVariables) {
+        return `[Unresolved: ${raw}]`;
+      }
+      return '';
+    }
+
+    const unrec = `[Unrecognized command: {{${raw}}}]`;
+    errors.push(unrec);
+    return unrec;
   });
 
   // Calculate cursor marker position and strip it
@@ -257,20 +385,20 @@ export function renderSnippet(template: string, context: RenderContext = {}): Re
 
   return {
     text: finalText,
-    cursorOffset
+    cursorOffset,
+    errors,
+    warnings
   };
 }
 
 function handleDateTag(raw: string, now: Date): string {
-  // Examples:
-  // {{date}}
-  // {{time}}
-  // {{date:YYYY-MM-DD}}
-  // {{date:+1d}}
-  // {{date:format="DD/MM/YYYY"|offset="+1d"}}
   const colonIdx = raw.indexOf(':');
   if (colonIdx === -1) {
-    if (raw.toLowerCase() === 'time') {
+    const tag = raw.toLowerCase().trim();
+    if (tag === 'datetime') {
+      return now.toISOString();
+    }
+    if (tag === 'time') {
       return formatDateTime(now, { format: 'HH:mm' });
     }
     return formatDateTime(now, { format: 'YYYY-MM-DD' });
@@ -283,9 +411,13 @@ function handleDateTag(raw: string, now: Date): string {
   let format = attrs['format'] || (isTime ? 'HH:mm' : 'YYYY-MM-DD');
   let offset = attrs['offset'] || '';
 
-  // If positional parameter provided without format= or offset=
   if (attrs['default'] && !attrs['format']) {
-    if (attrs['default'].startsWith('+') || attrs['default'].startsWith('-') || attrs['default'] === 'tomorrow' || attrs['default'] === 'yesterday') {
+    if (
+      attrs['default'].startsWith('+') ||
+      attrs['default'].startsWith('-') ||
+      attrs['default'] === 'tomorrow' ||
+      attrs['default'] === 'yesterday'
+    ) {
       offset = attrs['default'];
     } else {
       format = attrs['default'];
@@ -313,7 +445,6 @@ function processBlocks(template: string, vars: Record<string, any>, context: Ren
       count = parseInt(String(vars[countExpr]), 10) || 0;
     }
 
-    // Safety boundary: max 100 repeats
     count = Math.min(Math.max(count, 0), 100);
     let output = '';
     for (let i = 0; i < count; i++) {
@@ -340,4 +471,3 @@ function evaluateCondition(cond: string, vars: Record<string, any>): boolean {
     return false;
   }
 }
-

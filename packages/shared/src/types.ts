@@ -41,6 +41,19 @@ export interface WorkspaceMember {
   };
 }
 
+export interface WorkspaceInvitation {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: WorkspaceRole;
+  token: string;
+  invitedById: string;
+  expiresAt: string;
+  acceptedAt?: string | null;
+  revokedAt?: string | null;
+  createdAt: string;
+}
+
 export interface Folder {
   id: string;
   workspaceId: string;

@@ -1,7 +1,7 @@
+import 'dotenv/config';
 import fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
-import dotenv from 'dotenv';
 import { initDatabase, getDatabaseStatus, getRepository } from './db/connection.js';
 import { AuthService } from './services/auth.service.js';
 import { SnippetService } from './services/snippet.service.js';
@@ -15,8 +15,6 @@ import { transferRoutes } from './routes/transfer.routes.js';
 import { tableRoutes } from './routes/table.routes.js';
 import { emailService } from './services/email.service.js';
 
-dotenv.config();
-
 export async function createServer(): Promise<FastifyInstance> {
   const app = fastify({
     logger: process.env.NODE_ENV === 'development' ? {
@@ -28,15 +26,42 @@ export async function createServer(): Promise<FastifyInstance> {
     } : { level: 'info' }
   });
 
-  // CORS configuration
+  // CORS configuration (ST-027)
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim().toLowerCase())
+    .filter(Boolean);
+
   await app.register(cors, {
     origin: (origin, cb) => {
-      // Allow browser extensions (chrome-extension://, moz-extension://) and web app
-      if (!origin || origin.startsWith('chrome-extension://') || origin.startsWith('moz-extension://') || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      // Allow non-browser requests (e.g. mobile, curl, server-to-server)
+      if (!origin) {
         cb(null, true);
         return;
       }
-      cb(null, true);
+
+      // Allow browser extensions (chrome-extension://, moz-extension://)
+      if (origin.startsWith('chrome-extension://') || origin.startsWith('moz-extension://')) {
+        cb(null, true);
+        return;
+      }
+
+      const lowerOrigin = origin.toLowerCase();
+
+      // Check configured allowed origins
+      if (allowedOrigins.some((allowed) => lowerOrigin === allowed || lowerOrigin.endsWith('.' + allowed))) {
+        cb(null, true);
+        return;
+      }
+
+      // Allow localhost / 127.0.0.1 in non-production environments
+      if (process.env.NODE_ENV !== 'production' && (lowerOrigin.includes('localhost') || lowerOrigin.includes('127.0.0.1'))) {
+        cb(null, true);
+        return;
+      }
+
+      // Reject all unauthorized origins
+      cb(new Error(`Origin ${origin} not allowed by CORS policy`), false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']

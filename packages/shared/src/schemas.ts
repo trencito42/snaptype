@@ -64,6 +64,7 @@ export const ImportSnippetItemSchema = z.object({
   shortcut: z.string().trim().min(1),
   plainContent: z.string(),
   richContent: z.string().nullable().optional(),
+  folderId: z.string().optional(),
   folderName: z.string().trim().optional(),
   description: z.string().nullable().optional(),
   tags: z.array(z.string()).optional()
@@ -72,6 +73,7 @@ export const ImportSnippetItemSchema = z.object({
 export const ImportSnippetsSchema = z.object({
   workspaceId: z.string().uuid().optional(),
   snippets: z.array(ImportSnippetItemSchema),
+  folders: z.array(z.any()).optional(),
   format: z.enum(['snaptype_json', 'textblaze_json', 'csv']).default('snaptype_json'),
   conflictStrategy: z.enum(['skip', 'overwrite', 'duplicate']).default('duplicate')
 });

@@ -87,7 +87,7 @@ export class SnippetService {
       }
     }
 
-    return this.repo.updateSnippet(id, input, userId);
+    return this.repo.updateSnippet(id, input, userId, input.expectedVersion);
   }
 
   public async deleteSnippet(id: string, userId: string): Promise<void> {
@@ -176,12 +176,37 @@ export class SnippetService {
       folderMap.set(f.name.toLowerCase().trim(), f);
     }
 
+    // Map old folder IDs to new workspace folder IDs (ST-033)
+    const folderIdMap = new Map<string, string>();
+    if (input.folders && Array.isArray(input.folders)) {
+      for (const f of input.folders) {
+        if (!f || !f.name) continue;
+        const normName = f.name.toLowerCase().trim();
+        let targetFolder = folderMap.get(normName);
+        if (!targetFolder) {
+          const mappedParentId = f.parentId ? (folderIdMap.get(f.parentId) || null) : null;
+          targetFolder = await this.repo.createFolder(workspaceId, {
+            name: f.name.trim(),
+            parentId: mappedParentId,
+            color: f.color || null,
+            icon: f.icon || null
+          });
+          folderMap.set(normName, targetFolder);
+        }
+        if (f.id) {
+          folderIdMap.set(f.id, targetFolder.id);
+        }
+      }
+    }
+
     for (const item of input.snippets) {
       let shortcut = item.shortcut.trim();
       if (!shortcut) continue;
 
       let folderId: string | null = null;
-      if (item.folderName) {
+      if (item.folderId && folderIdMap.has(item.folderId)) {
+        folderId = folderIdMap.get(item.folderId)!;
+      } else if (item.folderName) {
         const normFolderName = item.folderName.toLowerCase().trim();
         if (folderMap.has(normFolderName)) {
           folderId = folderMap.get(normFolderName)!.id;

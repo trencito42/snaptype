@@ -9,13 +9,15 @@ import { ImportExportModal } from './pages/ImportExportModal.js';
 import { TestGround } from './pages/TestGround.js';
 import { InstallGuide } from './pages/InstallGuide.js';
 import { PrivacyPolicy } from './pages/PrivacyPolicy.js';
+import { TermsOfService } from './pages/TermsOfService.js';
 
 export const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'test-ground' | 'install' | 'privacy'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'test-ground' | 'install' | 'privacy' | 'terms'>('landing');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => api.isAuthenticated());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
 
   useEffect(() => {
     // If authenticated on load, default view can be dashboard or landing
@@ -66,6 +68,7 @@ export const App: React.FC = () => {
         {currentView === 'dashboard' && (
           isAuthenticated ? (
             <Dashboard
+              key={dashboardRefreshKey}
               onOpenSettings={() => setIsSettingsOpen(true)}
               onOpenImportExport={() => setIsImportExportOpen(true)}
               onLogout={handleLogout}
@@ -81,6 +84,7 @@ export const App: React.FC = () => {
         {currentView === 'test-ground' && <TestGround />}
         {currentView === 'install' && <InstallGuide />}
         {currentView === 'privacy' && <PrivacyPolicy />}
+        {currentView === 'terms' && <TermsOfService />}
       </main>
 
       {/* Modals */}
@@ -98,7 +102,7 @@ export const App: React.FC = () => {
       <ImportExportModal
         isOpen={isImportExportOpen}
         onClose={() => setIsImportExportOpen(false)}
-        onSuccess={() => {}}
+        onSuccess={() => setDashboardRefreshKey((k) => k + 1)}
       />
     </div>
   );

@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "tsc --build --noEmit",
+    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/snippet-engine/tsconfig.json && tsc --noEmit -p packages/browser-compat/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p apps/extension/tsconfig.json",
+    "typecheck:extension": "tsc --noEmit -p apps/extension/tsconfig.json",
     "dev:api": "npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
     "dev": "npm run dev -w apps/api & npm run dev -w apps/web"

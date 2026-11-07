@@ -65,7 +65,7 @@ describe('Data Tables and Lookup Resolution', () => {
     const rows = await repo.findTableRows(tableId);
     const aliceRow = rows.find(r => r.data.email === 'alice@example.com')!;
     
-    await repo.updateTableRow(aliceRow.id, { plan: 'VIP' });
+    await repo.updateTableRow(tableId, aliceRow.id, { plan: 'VIP' });
     const updatedRows = await repo.findTableRows(tableId);
     const updatedAlice = updatedRows.find(r => r.data.email === 'alice@example.com')!;
     expect(updatedAlice.data.plan).toBe('VIP');
@@ -92,7 +92,7 @@ describe('Data Tables and Lookup Resolution', () => {
 
   it('deletes rows and tables cleanly', async () => {
     const rows = await repo.findTableRows(tableId);
-    await repo.deleteTableRow(rows[0].id);
+    await repo.deleteTableRow(tableId, rows[0].id);
     const afterDeleteRows = await repo.findTableRows(tableId);
     expect(afterDeleteRows).toHaveLength(1);
 

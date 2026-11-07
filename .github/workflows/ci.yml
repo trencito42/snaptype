@@ -26,7 +26,13 @@ jobs:
       - name: Build Shared Packages
         run: npm run build:packages
 
-      - name: Run Test Suites (Unit, Integration & Benchmarks)
+      - name: Strict TypeScript Multi-Project Typecheck (ST-001)
+        run: npm run typecheck
+
+      - name: Build Backend API Server
+        run: npm run build:api
+
+      - name: Run Complete Test Suite (Unit, Integration & Performance Benchmarks)
         run: npm test
 
       - name: Build Web Application
@@ -38,6 +44,9 @@ jobs:
       - name: Package Extension Archives
         run: npm run package:extensions
 
+      - name: Validate Docker Compose Configuration (ST-005)
+        run: docker compose --env-file .env.docker.example config
+
       - name: Upload Extension Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -46,4 +55,3 @@ jobs:
             dist/chrome-extension.zip
             dist/firefox-extension.zip
           retention-days: 14
-

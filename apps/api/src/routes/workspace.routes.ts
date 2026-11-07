@@ -2,16 +2,22 @@ import { FastifyInstance } from 'fastify';
 import { IRepository } from '../db/repository.js';
 import { AuthService } from '../services/auth.service.js';
 import { createAuthMiddleware } from '../middleware/auth.middleware.js';
+import { WorkspaceRole } from '@snaptype/shared';
+import crypto from 'node:crypto';
+
+const INVITATION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, authService: AuthService) {
   const requireAuth = createAuthMiddleware(authService);
 
+  // List workspaces for user
   app.get('/api/v1/workspaces', { preHandler: requireAuth }, async (request) => {
     const user = request.user!;
     const workspaces = await repo.findUserWorkspaces(user.id);
     return { workspaces };
   });
 
+  // Create workspace (ST-037)
   app.post('/api/v1/workspaces', { preHandler: requireAuth }, async (request, reply) => {
     const user = request.user!;
     const body = request.body as { name: string };
@@ -20,11 +26,31 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
     }
 
     const name = body.name.trim();
-    const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
+    const slugBase = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace';
+    const slug = `${slugBase}-${crypto.randomBytes(3).toString('hex')}`;
     const ws = await repo.createWorkspace(name, slug, user.id, false);
     return reply.status(201).send({ workspace: ws });
   });
 
+  // Get single workspace
+  app.get('/api/v1/workspaces/:id', { preHandler: requireAuth }, async (request, reply) => {
+    const user = request.user!;
+    const { id } = request.params as { id: string };
+
+    const member = await repo.findWorkspaceMember(id, user.id);
+    if (!member) {
+      return reply.status(403).send({ error: 'Access denied to workspace' });
+    }
+
+    const workspace = await repo.findWorkspaceById(id);
+    if (!workspace) {
+      return reply.status(404).send({ error: 'Workspace not found' });
+    }
+
+    return { workspace, role: member.role };
+  });
+
+  // Get workspace members
   app.get('/api/v1/workspaces/:id/members', { preHandler: requireAuth }, async (request, reply) => {
     const user = request.user!;
     const { id } = request.params as { id: string };
@@ -34,12 +60,11 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
       return reply.status(403).send({ error: 'Access denied to workspace' });
     }
 
-    // Return real workspace members list
     const members = await repo.findWorkspaceMembers(id);
     return { members };
   });
 
-  // Invite/add workspace member (requires admin or owner)
+  // Add workspace member or send pending invitation (ST-007)
   app.post('/api/v1/workspaces/:id/members', { preHandler: requireAuth }, async (request, reply) => {
     const user = request.user!;
     const { id } = request.params as { id: string };
@@ -54,18 +79,34 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
       return reply.status(400).send({ error: 'Valid email is required' });
     }
 
-    // Find or create target user
-    let targetUser = await repo.findUserByEmail(body.email.trim());
-    if (!targetUser) {
-      targetUser = await repo.createUser(body.email.trim());
+    const targetEmail = body.email.toLowerCase().trim();
+    const assignedRole = (body.role || 'editor') as WorkspaceRole;
+
+    // Check if target user is an existing registered user
+    const targetUser = await repo.findUserByEmail(targetEmail);
+    if (targetUser) {
+      // Check if already a member
+      const existingMember = await repo.findWorkspaceMember(id, targetUser.id);
+      if (existingMember) {
+        return reply.status(400).send({ error: 'User is already a member of this workspace' });
+      }
+
+      const newMember = await repo.addWorkspaceMember(id, targetUser.id, assignedRole);
+      return reply.status(201).send({ member: newMember });
     }
 
-    const assignedRole = body.role || 'editor';
-    const newMember = await repo.addWorkspaceMember(id, targetUser.id, assignedRole);
-    return reply.status(201).send({ member: newMember });
+    // Target user does NOT exist yet: Create a secure pending invitation (do NOT create phantom user!)
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + INVITATION_DURATION_MS);
+    const invitation = await repo.createWorkspaceInvitation(id, targetEmail, assignedRole, user.id, token, expiresAt);
+
+    return reply.status(201).send({
+      invitation,
+      message: `Invitation issued for ${targetEmail}. Pending acceptance.`
+    });
   });
 
-  // Remove workspace member (requires admin or owner)
+  // Remove workspace member
   app.delete('/api/v1/workspaces/:id/members/:userId', { preHandler: requireAuth }, async (request, reply) => {
     const user = request.user!;
     const { id, userId } = request.params as { id: string; userId: string };
@@ -87,5 +128,49 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
     await repo.removeWorkspaceMember(id, userId);
     return { success: true, message: 'Member removed from workspace' };
   });
-}
 
+  // List pending workspace invitations
+  app.get('/api/v1/workspaces/:id/invitations', { preHandler: requireAuth }, async (request, reply) => {
+    const user = request.user!;
+    const { id } = request.params as { id: string };
+
+    const member = await repo.findWorkspaceMember(id, user.id);
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      return reply.status(403).send({ error: 'Owner or admin access required to view invitations' });
+    }
+
+    const invitations = await repo.findWorkspaceInvitations(id);
+    return { invitations };
+  });
+
+  // Revoke workspace invitation
+  app.delete('/api/v1/workspaces/:id/invitations/:invitationId', { preHandler: requireAuth }, async (request, reply) => {
+    const user = request.user!;
+    const { id, invitationId } = request.params as { id: string; invitationId: string };
+
+    const member = await repo.findWorkspaceMember(id, user.id);
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      return reply.status(403).send({ error: 'Owner or admin access required to revoke invitations' });
+    }
+
+    await repo.revokeWorkspaceInvitation(invitationId);
+    return { success: true, message: 'Invitation revoked' };
+  });
+
+  // Accept workspace invitation (ST-007)
+  app.post('/api/v1/invitations/accept', { preHandler: requireAuth }, async (request, reply) => {
+    const user = request.user!;
+    const body = request.body as { token: string };
+
+    if (!body?.token?.trim()) {
+      return reply.status(400).send({ error: 'Invitation token is required' });
+    }
+
+    try {
+      const newMember = await repo.acceptWorkspaceInvitation(body.token.trim(), user.id);
+      return reply.status(200).send({ success: true, member: newMember });
+    } catch (err: any) {
+      return reply.status(400).send({ error: err.message });
+    }
+  });
+}

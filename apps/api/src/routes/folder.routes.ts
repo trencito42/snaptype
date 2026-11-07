@@ -4,6 +4,25 @@ import { AuthService } from '../services/auth.service.js';
 import { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import { CreateFolderSchema, UpdateFolderSchema } from '@snaptype/shared';
 
+async function wouldCreateCycle(repo: IRepository, folderId: string, candidateParentId: string): Promise<boolean> {
+  let currId: string | null = candidateParentId;
+  const visited = new Set<string>();
+
+  while (currId) {
+    if (currId === folderId) {
+      return true; // Transitive cycle detected!
+    }
+    if (visited.has(currId)) {
+      return true;
+    }
+    visited.add(currId);
+
+    const parent = await repo.findFolderById(currId);
+    currId = parent?.parentId || null;
+  }
+  return false;
+}
+
 export async function folderRoutes(app: FastifyInstance, repo: IRepository, authService: AuthService) {
   const requireAuth = createAuthMiddleware(authService);
 
@@ -77,6 +96,11 @@ export async function folderRoutes(app: FastifyInstance, repo: IRepository, auth
       const parentFolder = await repo.findFolderById(parsed.data.parentId);
       if (!parentFolder || parentFolder.workspaceId !== folder.workspaceId) {
         return reply.status(400).send({ error: 'Parent folder must belong to the same workspace' });
+      }
+
+      // Check transitive cycle (ST-032)
+      if (await wouldCreateCycle(repo, id, parsed.data.parentId)) {
+        return reply.status(400).send({ error: 'Cannot set parent: cyclic hierarchy detected' });
       }
     }
 

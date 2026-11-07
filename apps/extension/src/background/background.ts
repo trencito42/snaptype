@@ -7,6 +7,7 @@ const API_BASE = typeof __SNAPTYPE_API_URL__ !== 'undefined'
   ? __SNAPTYPE_API_URL__ 
   : 'http://localhost:3000/api/v1';
 
+const PERIODIC_SYNC_ALARM = 'snaptype-periodic-sync';
 
 interface BackgroundState {
   token: string | null;
@@ -24,7 +25,7 @@ const state: BackgroundState = {
   lastSyncTime: null
 };
 
-// Initialize background lifecycle
+// Initialize background lifecycle and alarm jobs (ST-009 & ST-018)
 async function init() {
   const authStore = BrowserApi.getAuthStorage();
   const stored = await authStore.get(['snaptype_token']);
@@ -33,18 +34,62 @@ async function init() {
     await syncWithServer();
   }
 
+  // Setup periodic sync alarms
+  setupAlarms();
+
   // Setup context menu
+  updateContextMenu();
+}
+
+function setupAlarms() {
+  if (typeof chrome !== 'undefined' && chrome.alarms) {
+    try {
+      chrome.alarms.get(PERIODIC_SYNC_ALARM, (alarm) => {
+        if (!alarm) {
+          chrome.alarms.create(PERIODIC_SYNC_ALARM, {
+            periodInMinutes: 5,
+            delayInMinutes: 1
+          });
+        }
+      });
+    } catch {
+      // Alarms API may not be active in mock environments
+    }
+  }
+}
+
+function updateContextMenu(shortcut?: string) {
   try {
+    const hotkey = shortcut || state.preferences.assistantShortcut || 'Ctrl+Shift+Space';
     BrowserApi.api.contextMenus.removeAll(() => {
       BrowserApi.api.contextMenus.create({
         id: 'snaptype-insert-assistant',
-        title: 'Insert SnapType Snippet (Ctrl+Shift+Space)',
+        title: `Insert SnapType Snippet (${hotkey})`,
         contexts: ['editable']
       });
     });
-  } catch (err) {
+  } catch {
     // contextMenus might not be available in some testing contexts
   }
+}
+
+// Alarms listener for MV3 periodic wake up and sync
+if (typeof chrome !== 'undefined' && chrome.alarms) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === PERIODIC_SYNC_ALARM) {
+      syncWithServer().catch(() => {});
+    }
+  });
+}
+
+// Service worker cold start / install lifecycle
+if (typeof chrome !== 'undefined' && chrome.runtime) {
+  chrome.runtime.onStartup?.addListener(() => {
+    init().catch(() => {});
+  });
+  chrome.runtime.onInstalled?.addListener(() => {
+    init().catch(() => {});
+  });
 }
 
 // Context menu click listener
@@ -77,7 +122,10 @@ async function syncWithServer(): Promise<boolean> {
 
     const data: SyncResponse = await res.json();
     state.currentRevision = data.currentRevision;
-    state.preferences = data.preferences || state.preferences;
+    if (data.preferences) {
+      state.preferences = data.preferences;
+      updateContextMenu(data.preferences.assistantShortcut);
+    }
     state.lastSyncTime = Date.now();
 
     // If first load or full sync:
@@ -175,6 +223,22 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
         };
       }
 
+      // ST-010: Record snippet usage from content script insertion
+      case 'RECORD_USAGE': {
+        if (state.token && message.snippetId) {
+          fetch(`${API_BASE}/snippets/${message.snippetId}/usage`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${state.token}`,
+              'Content-Type': 'application/json'
+            }
+          }).catch((err) => {
+            console.debug('[SnapType] Record usage failed:', err);
+          });
+        }
+        return { success: true };
+      }
+
       case 'AUTH_REQUEST_OTP': {
         try {
           const res = await fetch(`${API_BASE}/auth/request-otp`, {
@@ -235,4 +299,3 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
 });
 
 init();
-

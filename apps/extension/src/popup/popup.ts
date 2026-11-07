@@ -4,6 +4,7 @@ import { renderSnippet } from '@snaptype/snippet-engine';
 
 declare const __SNAPTYPE_APP_URL__: string;
 const APP_URL = typeof __SNAPTYPE_APP_URL__ !== 'undefined' ? __SNAPTYPE_APP_URL__ : 'http://localhost:5173';
+const authView = document.getElementById('auth-view')!;
 const mainView = document.getElementById('main-view')!;
 const emailStep = document.getElementById('email-step')!;
 const otpStep = document.getElementById('otp-step')!;
@@ -66,6 +67,12 @@ function renderSnippetList(snippets: Snippet[]) {
     const row = document.createElement('div');
     row.className = 'snippet-row';
 
+    const infoDiv = document.createElement('div');
+    infoDiv.style.display = 'flex';
+    infoDiv.style.flexDirection = 'column';
+    infoDiv.style.flex = '1';
+    infoDiv.style.overflow = 'hidden';
+
     const titleEl = document.createElement('span');
     titleEl.className = 'row-title';
     titleEl.textContent = s.name;
@@ -73,34 +80,74 @@ function renderSnippetList(snippets: Snippet[]) {
     const shortcutEl = document.createElement('span');
     shortcutEl.className = 'row-shortcut';
     shortcutEl.textContent = s.shortcut;
+    shortcutEl.style.alignSelf = 'flex-start';
+    shortcutEl.style.marginTop = '2px';
 
-    row.appendChild(titleEl);
-    row.appendChild(shortcutEl);
+    infoDiv.appendChild(titleEl);
+    infoDiv.appendChild(shortcutEl);
 
-    // Click to copy rendered text and attempt insertion into active tab
-    row.onclick = async () => {
+    const actionDiv = document.createElement('div');
+    actionDiv.style.display = 'flex';
+    actionDiv.style.gap = '4px';
+
+    // Insert Button (Primary Action)
+    const insertBtn = document.createElement('button');
+    insertBtn.className = 'popup-btn popup-btn-primary';
+    insertBtn.style.padding = '3px 8px';
+    insertBtn.style.fontSize = '11px';
+    insertBtn.style.margin = '0';
+    insertBtn.textContent = 'Insert';
+    insertBtn.onclick = (e) => {
+      e.stopPropagation();
       const rendered = renderSnippet(s.plainContent);
-      await navigator.clipboard.writeText(rendered.text);
-      row.style.backgroundColor = '#eefde9';
-      setTimeout(() => (row.style.backgroundColor = ''), 800);
-
-      // Attempt active tab insertion
       try {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, {
-              action: 'INSERT_TEXT',
-              text: rendered.text,
-              cursorOffset: rendered.cursorOffset
-            }, () => {
-              if (chrome.runtime.lastError) { /* ignore tab errors */ }
-            });
+            chrome.tabs.sendMessage(
+              tabs[0].id,
+              {
+                action: 'INSERT_TEXT',
+                text: rendered.text,
+                cursorOffset: rendered.cursorOffset
+              },
+              () => {
+                insertBtn.textContent = 'Inserted!';
+                setTimeout(() => (insertBtn.textContent = 'Insert'), 1000);
+              }
+            );
           }
         });
       } catch {
-        // clipboard write succeeded as safe fallback
+        // Tab not available or permissions restricted
       }
     };
+
+    // Copy Button (Secondary Action, ST-017)
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'popup-btn popup-btn-ghost';
+    copyBtn.style.padding = '3px 8px';
+    copyBtn.style.fontSize = '11px';
+    copyBtn.style.margin = '0';
+    copyBtn.style.border = '1px solid var(--border)';
+    copyBtn.textContent = 'Copy';
+    copyBtn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        const rendered = renderSnippet(s.plainContent);
+        await navigator.clipboard.writeText(rendered.text);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => (copyBtn.textContent = 'Copy'), 1000);
+      } catch {
+        copyBtn.textContent = 'Failed';
+        setTimeout(() => (copyBtn.textContent = 'Copy'), 1000);
+      }
+    };
+
+    actionDiv.appendChild(insertBtn);
+    actionDiv.appendChild(copyBtn);
+
+    row.appendChild(infoDiv);
+    row.appendChild(actionDiv);
 
     snippetList.appendChild(row);
   }

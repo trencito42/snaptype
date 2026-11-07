@@ -3,7 +3,7 @@ import mysql from 'mysql2/promise';
 import * as schema from './schema.js';
 import { IRepository, InMemoryRepository } from './repository.js';
 import { eq, and, sql, isNull, inArray, gt } from 'drizzle-orm';
-import { User, Workspace, WorkspaceMember, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES, DataTable, DataTableColumn, DataTableRow } from '@snaptype/shared';
+import { User, Workspace, WorkspaceMember, WorkspaceInvitation, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES, DataTable, DataTableColumn, DataTableRow } from '@snaptype/shared';
 import crypto from 'node:crypto';
 const uuidv4 = () => crypto.randomUUID();
 
@@ -106,10 +106,11 @@ export class MySQLRepository implements IRepository {
       .where(eq(schema.emailChallengesTable.id, id));
   }
 
-  async markChallengeVerified(id: string): Promise<void> {
-    await this.db.update(schema.emailChallengesTable)
+  async markChallengeVerified(id: string): Promise<boolean> {
+    const res = await this.db.update(schema.emailChallengesTable)
       .set({ verifiedAt: new Date() })
-      .where(eq(schema.emailChallengesTable.id, id));
+      .where(and(eq(schema.emailChallengesTable.id, id), isNull(schema.emailChallengesTable.verifiedAt)));
+    return ((res as any)?.[0]?.affectedRows ?? (res as any)?.affectedRows ?? 0) > 0;
   }
 
   async createSession(userId: string, tokenHash: string, expiresAt: Date, userAgent?: string | null, ipAddress?: string | null) {
@@ -280,6 +281,130 @@ export class MySQLRepository implements IRepository {
       .where(and(eq(schema.workspaceMembersTable.workspaceId, workspaceId), eq(schema.workspaceMembersTable.userId, userId)));
   }
 
+  async createWorkspaceInvitation(
+    workspaceId: string,
+    email: string,
+    role: WorkspaceRole,
+    invitedById: string,
+    token: string,
+    expiresAt: Date
+  ): Promise<WorkspaceInvitation> {
+    const id = uuidv4();
+    const now = new Date();
+    await this.db.insert(schema.workspaceInvitationsTable).values({
+      id,
+      workspaceId,
+      email: email.toLowerCase().trim(),
+      role,
+      token,
+      invitedById,
+      expiresAt,
+      createdAt: now
+    });
+    return {
+      id,
+      workspaceId,
+      email: email.toLowerCase().trim(),
+      role,
+      token,
+      invitedById,
+      expiresAt: expiresAt.toISOString(),
+      acceptedAt: null,
+      revokedAt: null,
+      createdAt: now.toISOString()
+    };
+  }
+
+  async findInvitationByToken(token: string): Promise<WorkspaceInvitation | null> {
+    const rows = await this.db.select().from(schema.workspaceInvitationsTable).where(eq(schema.workspaceInvitationsTable.token, token)).limit(1);
+    if (!rows[0]) return null;
+    const r = rows[0];
+    return {
+      id: r.id,
+      workspaceId: r.workspaceId,
+      email: r.email,
+      role: r.role as WorkspaceRole,
+      token: r.token,
+      invitedById: r.invitedById,
+      expiresAt: r.expiresAt.toISOString(),
+      acceptedAt: r.acceptedAt?.toISOString() || null,
+      revokedAt: r.revokedAt?.toISOString() || null,
+      createdAt: r.createdAt.toISOString()
+    };
+  }
+
+  async findWorkspaceInvitations(workspaceId: string): Promise<WorkspaceInvitation[]> {
+    const now = new Date();
+    const rows = await this.db.select().from(schema.workspaceInvitationsTable)
+      .where(and(
+        eq(schema.workspaceInvitationsTable.workspaceId, workspaceId),
+        isNull(schema.workspaceInvitationsTable.acceptedAt),
+        isNull(schema.workspaceInvitationsTable.revokedAt),
+        gt(schema.workspaceInvitationsTable.expiresAt, now)
+      ));
+    return rows.map((r) => ({
+      id: r.id,
+      workspaceId: r.workspaceId,
+      email: r.email,
+      role: r.role as WorkspaceRole,
+      token: r.token,
+      invitedById: r.invitedById,
+      expiresAt: r.expiresAt.toISOString(),
+      acceptedAt: r.acceptedAt?.toISOString() || null,
+      revokedAt: r.revokedAt?.toISOString() || null,
+      createdAt: r.createdAt.toISOString()
+    }));
+  }
+
+  async revokeWorkspaceInvitation(id: string): Promise<void> {
+    await this.db.update(schema.workspaceInvitationsTable)
+      .set({ revokedAt: new Date() })
+      .where(eq(schema.workspaceInvitationsTable.id, id));
+  }
+
+  async acceptWorkspaceInvitation(token: string, userId: string): Promise<WorkspaceMember> {
+    const inv = await this.findInvitationByToken(token);
+    if (!inv) throw new Error('Invitation not found');
+    if (inv.revokedAt) throw new Error('Invitation has been revoked');
+    if (inv.acceptedAt) throw new Error('Invitation has already been accepted');
+    if (new Date(inv.expiresAt) < new Date()) throw new Error('Invitation has expired');
+
+    const user = await this.findUserById(userId);
+    if (!user) throw new Error('User not found');
+    if (user.email.toLowerCase().trim() !== inv.email.toLowerCase().trim()) {
+      throw new Error('This invitation was sent to a different email address');
+    }
+
+    return await this.db.transaction(async (tx) => {
+      await tx.update(schema.workspaceInvitationsTable)
+        .set({ acceptedAt: new Date() })
+        .where(eq(schema.workspaceInvitationsTable.id, inv.id));
+
+      const memberId = uuidv4();
+      const now = new Date();
+      await tx.insert(schema.workspaceMembersTable).values({
+        id: memberId,
+        workspaceId: inv.workspaceId,
+        userId,
+        role: inv.role,
+        createdAt: now
+      });
+
+      return {
+        id: memberId,
+        workspaceId: inv.workspaceId,
+        userId,
+        role: inv.role,
+        createdAt: now.toISOString(),
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name
+        }
+      };
+    });
+  }
+
   async findFolders(workspaceId: string): Promise<Folder[]> {
     const rows = await this.db.select().from(schema.foldersTable)
       .where(and(eq(schema.foldersTable.workspaceId, workspaceId), isNull(schema.foldersTable.deletedAt)));
@@ -316,76 +441,115 @@ export class MySQLRepository implements IRepository {
     };
   }
 
-  async createFolder(workspaceId: string, data: Partial<Folder>): Promise<Folder> {
-    const id = uuidv4();
+  private async bumpWorkspaceRevisionTx(tx: any, workspaceId: string): Promise<number> {
     const now = new Date();
-    const newRev = await this.bumpWorkspaceRevision(workspaceId);
-    await this.db.insert(schema.foldersTable).values({
-      id,
+    await tx.insert(schema.workspaceRevisionsTable).values({
       workspaceId,
-      parentId: data.parentId || null,
-      name: data.name || 'Untitled Folder',
-      color: data.color || null,
-      icon: data.icon || null,
-      isFavorite: Boolean(data.isFavorite),
-      sortOrder: data.sortOrder || 0,
-      revision: newRev,
-      createdAt: now,
+      currentRevision: 1,
       updatedAt: now
+    }).onDuplicateKeyUpdate({
+      set: {
+        currentRevision: sql`${schema.workspaceRevisionsTable.currentRevision} + 1`,
+        updatedAt: now
+      }
     });
-    return {
-      id,
-      workspaceId,
-      parentId: data.parentId || null,
-      name: data.name || 'Untitled Folder',
-      color: data.color || null,
-      icon: data.icon || null,
-      isFavorite: Boolean(data.isFavorite),
-      sortOrder: data.sortOrder || 0,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString()
-    };
+
+    const rows = await tx.select().from(schema.workspaceRevisionsTable).where(eq(schema.workspaceRevisionsTable.workspaceId, workspaceId)).limit(1);
+    return rows[0]?.currentRevision ?? 1;
+  }
+
+  async createFolder(workspaceId: string, data: Partial<Folder>): Promise<Folder> {
+    return await this.db.transaction(async (tx) => {
+      const id = uuidv4();
+      const now = new Date();
+      const newRev = await this.bumpWorkspaceRevisionTx(tx, workspaceId);
+      await tx.insert(schema.foldersTable).values({
+        id,
+        workspaceId,
+        parentId: data.parentId || null,
+        name: data.name || 'Untitled Folder',
+        color: data.color || null,
+        icon: data.icon || null,
+        isFavorite: Boolean(data.isFavorite),
+        sortOrder: data.sortOrder || 0,
+        revision: newRev,
+        createdAt: now,
+        updatedAt: now
+      });
+      return {
+        id,
+        workspaceId,
+        parentId: data.parentId || null,
+        name: data.name || 'Untitled Folder',
+        color: data.color || null,
+        icon: data.icon || null,
+        isFavorite: Boolean(data.isFavorite),
+        sortOrder: data.sortOrder || 0,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString()
+      };
+    });
   }
 
   async updateFolder(id: string, data: Partial<Folder>): Promise<Folder> {
-    const existing = await this.findFolderById(id);
-    if (!existing) throw new Error('Folder not found');
+    return await this.db.transaction(async (tx) => {
+      const rows = await tx.select().from(schema.foldersTable).where(and(eq(schema.foldersTable.id, id), isNull(schema.foldersTable.deletedAt))).limit(1);
+      if (!rows[0]) throw new Error('Folder not found');
+      const existing = rows[0];
 
-    const now = new Date();
-    const newRev = await this.bumpWorkspaceRevision(existing.workspaceId);
-    await this.db.update(schema.foldersTable).set({
-      name: data.name,
-      parentId: data.parentId,
-      color: data.color,
-      icon: data.icon,
-      isFavorite: data.isFavorite,
-      sortOrder: data.sortOrder,
-      revision: newRev,
-      updatedAt: now
-    }).where(eq(schema.foldersTable.id, id));
+      const now = new Date();
+      const newRev = await this.bumpWorkspaceRevisionTx(tx, existing.workspaceId);
+      await tx.update(schema.foldersTable).set({
+        name: data.name !== undefined ? data.name : existing.name,
+        parentId: data.parentId !== undefined ? data.parentId : existing.parentId,
+        color: data.color !== undefined ? data.color : existing.color,
+        icon: data.icon !== undefined ? data.icon : existing.icon,
+        isFavorite: data.isFavorite !== undefined ? Boolean(data.isFavorite) : existing.isFavorite,
+        sortOrder: data.sortOrder !== undefined ? data.sortOrder : existing.sortOrder,
+        revision: newRev,
+        updatedAt: now
+      }).where(eq(schema.foldersTable.id, id));
 
-    return (await this.findFolderById(id))!;
+      return {
+        id: existing.id,
+        workspaceId: existing.workspaceId,
+        parentId: data.parentId !== undefined ? data.parentId : existing.parentId,
+        name: data.name !== undefined ? data.name : existing.name,
+        color: data.color !== undefined ? data.color : existing.color,
+        icon: data.icon !== undefined ? data.icon : existing.icon,
+        isFavorite: data.isFavorite !== undefined ? Boolean(data.isFavorite) : existing.isFavorite,
+        sortOrder: data.sortOrder !== undefined ? data.sortOrder : existing.sortOrder,
+        createdAt: existing.createdAt.toISOString(),
+        updatedAt: now.toISOString()
+      };
+    });
   }
 
   async deleteFolder(id: string): Promise<void> {
-    const existing = await this.findFolderById(id);
-    if (!existing) return;
-    const now = new Date();
-    const newRev = await this.bumpWorkspaceRevision(existing.workspaceId);
+    await this.db.transaction(async (tx) => {
+      const rows = await tx.select().from(schema.foldersTable).where(eq(schema.foldersTable.id, id)).limit(1);
+      if (!rows[0]) return;
+      const existing = rows[0];
+      const now = new Date();
+      const newRev = await this.bumpWorkspaceRevisionTx(tx, existing.workspaceId);
 
-    await this.db.update(schema.foldersTable).set({ deletedAt: now, revision: newRev }).where(eq(schema.foldersTable.id, id));
-    // Record deletion tombstone
-    await this.db.insert(schema.syncTombstonesTable).values({
-      id: uuidv4(),
-      workspaceId: existing.workspaceId,
-      entityType: 'folder',
-      entityId: id,
-      revision: newRev,
-      createdAt: now
+      await tx.update(schema.foldersTable).set({ deletedAt: now, revision: newRev }).where(eq(schema.foldersTable.id, id));
+
+      await tx.insert(schema.syncTombstonesTable).values({
+        id: uuidv4(),
+        workspaceId: existing.workspaceId,
+        entityType: 'folder',
+        entityId: id,
+        revision: newRev,
+        createdAt: now
+      });
+
+      // Detach child snippets
+      await tx.update(schema.snippetsTable).set({ folderId: null, updatedAt: now, revision: newRev }).where(eq(schema.snippetsTable.folderId, id));
+
+      // Detach child folders (ST-032)
+      await tx.update(schema.foldersTable).set({ parentId: null, updatedAt: now, revision: newRev }).where(eq(schema.foldersTable.parentId, id));
     });
-
-    // Detach child snippets
-    await this.db.update(schema.snippetsTable).set({ folderId: null, updatedAt: now, revision: newRev }).where(eq(schema.snippetsTable.folderId, id));
   }
 
   async findSnippets(workspaceId: string, options: { folderId?: string | null; search?: string; tag?: string; favoriteOnly?: boolean } = {}): Promise<Snippet[]> {
@@ -473,100 +637,163 @@ export class MySQLRepository implements IRepository {
   }
 
   async createSnippet(workspaceId: string, data: Partial<Snippet>, createdById?: string): Promise<Snippet> {
-    const id = uuidv4();
-    const now = new Date();
-    const newRev = await this.bumpWorkspaceRevision(workspaceId);
+    return await this.db.transaction(async (tx) => {
+      const id = uuidv4();
+      const now = new Date();
+      const newRev = await this.bumpWorkspaceRevisionTx(tx, workspaceId);
 
-    await this.db.insert(schema.snippetsTable).values({
-      id,
-      workspaceId,
-      folderId: data.folderId || null,
-      name: data.name || 'Untitled Snippet',
-      shortcut: data.shortcut || '',
-      plainContent: data.plainContent || '',
-      richContent: data.richContent || null,
-      description: data.description || null,
-      tags: data.tags || [],
-      isFavorite: Boolean(data.isFavorite),
-      isEnabled: data.isEnabled !== false,
-      siteRestrictions: data.siteRestrictions || null,
-      version: 1,
-      revision: newRev,
-      usageCount: 0,
-      createdAt: now,
-      updatedAt: now
+      await tx.insert(schema.snippetsTable).values({
+        id,
+        workspaceId,
+        folderId: data.folderId || null,
+        name: data.name || 'Untitled Snippet',
+        shortcut: data.shortcut || '',
+        plainContent: data.plainContent || '',
+        richContent: data.richContent || null,
+        description: data.description || null,
+        tags: data.tags || [],
+        isFavorite: Boolean(data.isFavorite),
+        isEnabled: data.isEnabled !== false,
+        siteRestrictions: data.siteRestrictions || null,
+        version: 1,
+        revision: newRev,
+        usageCount: 0,
+        createdAt: now,
+        updatedAt: now
+      });
+
+      await tx.insert(schema.snippetRevisionsTable).values({
+        id: uuidv4(),
+        snippetId: id,
+        version: 1,
+        name: data.name || 'Untitled Snippet',
+        shortcut: data.shortcut || '',
+        plainContent: data.plainContent || '',
+        richContent: data.richContent || null,
+        createdById: createdById || null,
+        createdAt: now
+      });
+
+      return {
+        id,
+        workspaceId,
+        folderId: data.folderId || null,
+        name: data.name || 'Untitled Snippet',
+        shortcut: data.shortcut || '',
+        plainContent: data.plainContent || '',
+        richContent: data.richContent || null,
+        description: data.description || null,
+        tags: (data.tags || []) as string[],
+        isFavorite: Boolean(data.isFavorite),
+        isEnabled: data.isEnabled !== false,
+        siteRestrictions: data.siteRestrictions || null,
+        version: 1,
+        usageCount: 0,
+        lastUsedAt: null,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString()
+      };
     });
-
-    await this.db.insert(schema.snippetRevisionsTable).values({
-      id: uuidv4(),
-      snippetId: id,
-      version: 1,
-      name: data.name || 'Untitled Snippet',
-      shortcut: data.shortcut || '',
-      plainContent: data.plainContent || '',
-      richContent: data.richContent || null,
-      createdById: createdById || null,
-      createdAt: now
-    });
-
-    return (await this.findSnippetById(id))!;
   }
 
-  async updateSnippet(id: string, data: Partial<Snippet>, updatedById?: string): Promise<Snippet> {
-    const existing = await this.findSnippetById(id);
-    if (!existing) throw new Error('Snippet not found');
+  async updateSnippet(id: string, data: Partial<Snippet>, updatedById?: string, expectedVersion?: number): Promise<Snippet> {
+    return await this.db.transaction(async (tx) => {
+      const existingRows = await tx.select().from(schema.snippetsTable)
+        .where(and(eq(schema.snippetsTable.id, id), isNull(schema.snippetsTable.deletedAt)))
+        .limit(1);
 
-    const nextVer = existing.version + 1;
-    const now = new Date();
-    const newRev = await this.bumpWorkspaceRevision(existing.workspaceId);
+      if (!existingRows[0]) throw new Error('Snippet not found');
+      const snippet = existingRows[0];
 
-    await this.db.update(schema.snippetsTable).set({
-      name: data.name,
-      shortcut: data.shortcut,
-      folderId: data.folderId,
-      plainContent: data.plainContent,
-      richContent: data.richContent,
-      description: data.description,
-      tags: data.tags,
-      isFavorite: data.isFavorite,
-      isEnabled: data.isEnabled,
-      siteRestrictions: data.siteRestrictions,
-      version: nextVer,
-      revision: newRev,
-      updatedAt: now
-    }).where(eq(schema.snippetsTable.id, id));
+      if (expectedVersion !== undefined && snippet.version !== expectedVersion) {
+        const err = new Error(`Conflict: snippet was modified by another session (expected version ${expectedVersion}, current version is ${snippet.version}).`);
+        (err as any).statusCode = 409;
+        throw err;
+      }
 
-    await this.db.insert(schema.snippetRevisionsTable).values({
-      id: uuidv4(),
-      snippetId: id,
-      version: nextVer,
-      name: data.name ?? existing.name,
-      shortcut: data.shortcut ?? existing.shortcut,
-      plainContent: data.plainContent ?? existing.plainContent,
-      richContent: data.richContent ?? existing.richContent,
-      createdById: updatedById || null,
-      createdAt: now
+      const nextVer = snippet.version + 1;
+      const now = new Date();
+      const newRev = await this.bumpWorkspaceRevisionTx(tx, snippet.workspaceId);
+
+      const whereClause = expectedVersion !== undefined
+        ? and(eq(schema.snippetsTable.id, id), eq(schema.snippetsTable.version, expectedVersion))
+        : eq(schema.snippetsTable.id, id);
+
+      const updateResult: any = await tx.update(schema.snippetsTable).set({
+        name: data.name !== undefined ? data.name : snippet.name,
+        shortcut: data.shortcut !== undefined ? data.shortcut : snippet.shortcut,
+        folderId: data.folderId !== undefined ? data.folderId : snippet.folderId,
+        plainContent: data.plainContent !== undefined ? data.plainContent : snippet.plainContent,
+        richContent: data.richContent !== undefined ? data.richContent : snippet.richContent,
+        description: data.description !== undefined ? data.description : snippet.description,
+        tags: data.tags !== undefined ? data.tags : snippet.tags,
+        isFavorite: data.isFavorite !== undefined ? Boolean(data.isFavorite) : snippet.isFavorite,
+        isEnabled: data.isEnabled !== undefined ? Boolean(data.isEnabled) : snippet.isEnabled,
+        siteRestrictions: data.siteRestrictions !== undefined ? data.siteRestrictions : snippet.siteRestrictions,
+        version: nextVer,
+        revision: newRev,
+        updatedAt: now
+      }).where(whereClause);
+
+      if (expectedVersion !== undefined && updateResult && updateResult[0]?.affectedRows === 0) {
+        const err = new Error(`Conflict: snippet was modified concurrently by another transaction.`);
+        (err as any).statusCode = 409;
+        throw err;
+      }
+
+      await tx.insert(schema.snippetRevisionsTable).values({
+        id: uuidv4(),
+        snippetId: id,
+        version: nextVer,
+        name: data.name ?? snippet.name,
+        shortcut: data.shortcut ?? snippet.shortcut,
+        plainContent: data.plainContent ?? snippet.plainContent,
+        richContent: data.richContent !== undefined ? data.richContent : snippet.richContent,
+        createdById: updatedById || null,
+        createdAt: now
+      });
+
+      return {
+        id: snippet.id,
+        workspaceId: snippet.workspaceId,
+        folderId: data.folderId !== undefined ? data.folderId : snippet.folderId,
+        name: data.name !== undefined ? data.name : snippet.name,
+        shortcut: data.shortcut !== undefined ? data.shortcut : snippet.shortcut,
+        plainContent: data.plainContent !== undefined ? data.plainContent : snippet.plainContent,
+        richContent: data.richContent !== undefined ? data.richContent : snippet.richContent,
+        description: data.description !== undefined ? data.description : snippet.description,
+        tags: (data.tags !== undefined ? data.tags : snippet.tags) as string[],
+        isFavorite: data.isFavorite !== undefined ? Boolean(data.isFavorite) : snippet.isFavorite,
+        isEnabled: data.isEnabled !== undefined ? Boolean(data.isEnabled) : snippet.isEnabled,
+        siteRestrictions: data.siteRestrictions !== undefined ? data.siteRestrictions : snippet.siteRestrictions,
+        version: nextVer,
+        usageCount: snippet.usageCount,
+        lastUsedAt: snippet.lastUsedAt?.toISOString() || null,
+        createdAt: snippet.createdAt.toISOString(),
+        updatedAt: now.toISOString()
+      };
     });
-
-    return (await this.findSnippetById(id))!;
   }
 
   async deleteSnippet(id: string): Promise<void> {
-    const existing = await this.findSnippetById(id);
-    if (!existing) return;
-    const now = new Date();
-    const newRev = await this.bumpWorkspaceRevision(existing.workspaceId);
+    await this.db.transaction(async (tx) => {
+      const rows = await tx.select().from(schema.snippetsTable).where(eq(schema.snippetsTable.id, id)).limit(1);
+      if (!rows[0]) return;
+      const existing = rows[0];
+      const now = new Date();
+      const newRev = await this.bumpWorkspaceRevisionTx(tx, existing.workspaceId);
 
-    await this.db.update(schema.snippetsTable).set({ deletedAt: now, revision: newRev }).where(eq(schema.snippetsTable.id, id));
-    
-    // Record deletion tombstone
-    await this.db.insert(schema.syncTombstonesTable).values({
-      id: uuidv4(),
-      workspaceId: existing.workspaceId,
-      entityType: 'snippet',
-      entityId: id,
-      revision: newRev,
-      createdAt: now
+      await tx.update(schema.snippetsTable).set({ deletedAt: now, revision: newRev }).where(eq(schema.snippetsTable.id, id));
+
+      // Record deletion tombstone
+      await tx.insert(schema.syncTombstonesTable).values({
+        id: uuidv4(),
+        workspaceId: existing.workspaceId,
+        entityType: 'snippet',
+        entityId: id,
+        revision: newRev,
+        createdAt: now
+      });
     });
   }
 
@@ -848,6 +1075,20 @@ export class MySQLRepository implements IRepository {
     }));
   }
 
+  async findTableRowById(tableId: string, rowId: string): Promise<DataTableRow | null> {
+    const rows = await this.db.select().from(schema.dataRowsTable)
+      .where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)))
+      .limit(1);
+    if (!rows[0]) return null;
+    return {
+      id: rows[0].id,
+      tableId: rows[0].tableId,
+      data: rows[0].data as Record<string, any>,
+      createdAt: rows[0].createdAt.toISOString(),
+      updatedAt: rows[0].updatedAt.toISOString()
+    };
+  }
+
   async createTableRow(tableId: string, data: Record<string, any>): Promise<DataTableRow> {
     const id = uuidv4();
     const now = new Date();
@@ -867,17 +1108,19 @@ export class MySQLRepository implements IRepository {
     };
   }
 
-  async updateTableRow(id: string, data: Record<string, any>): Promise<DataTableRow> {
+  async updateTableRow(tableId: string, rowId: string, data: Record<string, any>): Promise<DataTableRow | null> {
     const now = new Date();
-    const existing = await this.db.select().from(schema.dataRowsTable).where(eq(schema.dataRowsTable.id, id)).limit(1);
-    if (!existing[0]) throw new Error('Row not found');
+    const existing = await this.db.select().from(schema.dataRowsTable)
+      .where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)))
+      .limit(1);
+    if (!existing[0]) return null;
     const merged = { ...(existing[0].data as Record<string, any>), ...data };
     await this.db.update(schema.dataRowsTable).set({
       data: merged,
       updatedAt: now
-    }).where(eq(schema.dataRowsTable.id, id));
+    }).where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)));
     return {
-      id,
+      id: existing[0].id,
       tableId: existing[0].tableId,
       data: merged,
       createdAt: existing[0].createdAt.toISOString(),
@@ -885,7 +1128,9 @@ export class MySQLRepository implements IRepository {
     };
   }
 
-  async deleteTableRow(id: string): Promise<void> {
-    await this.db.delete(schema.dataRowsTable).where(eq(schema.dataRowsTable.id, id));
+  async deleteTableRow(tableId: string, rowId: string): Promise<boolean> {
+    const result = await this.db.delete(schema.dataRowsTable)
+      .where(and(eq(schema.dataRowsTable.id, rowId), eq(schema.dataRowsTable.tableId, tableId)));
+    return true;
   }
 }

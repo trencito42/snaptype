@@ -27,6 +27,33 @@ const UpdateTableSchema = z.object({
   })).optional()
 });
 
+function validateRowData(columns: any[], data: Record<string, any>): { valid: boolean; error?: string; cleanData?: Record<string, any> } {
+  const cleanData: Record<string, any> = {};
+  const colMap = new Map((columns || []).map(c => [c.key, c]));
+
+  for (const [key, val] of Object.entries(data)) {
+    const col = colMap.get(key);
+    if (!col) {
+      cleanData[key] = val;
+      continue;
+    }
+    if (col.type === 'number') {
+      if (val === null || val === undefined || val === '') {
+        cleanData[key] = null;
+      } else {
+        const num = Number(val);
+        if (isNaN(num) || !isFinite(num)) {
+          return { valid: false, error: `Column '${col.name}' (${key}) must be a valid number, got '${val}'` };
+        }
+        cleanData[key] = num;
+      }
+    } else {
+      cleanData[key] = val !== null && val !== undefined ? String(val) : '';
+    }
+  }
+  return { valid: true, cleanData };
+}
+
 export async function tableRoutes(app: FastifyInstance, repo: IRepository, authService: AuthService) {
   const requireAuth = createAuthMiddleware(authService);
 
@@ -176,7 +203,12 @@ export async function tableRoutes(app: FastifyInstance, repo: IRepository, authS
       return reply.status(400).send({ error: 'Row data must be an object' });
     }
 
-    const row = await repo.createTableRow(id, data);
+    const validated = validateRowData(table.columns, data);
+    if (!validated.valid) {
+      return reply.status(400).send({ error: validated.error });
+    }
+
+    const row = await repo.createTableRow(id, validated.cleanData || data);
     return reply.status(201).send({ row });
   });
 
@@ -195,12 +227,26 @@ export async function tableRoutes(app: FastifyInstance, repo: IRepository, authS
       return reply.status(403).send({ error: 'Editor access required to update rows' });
     }
 
+    // Verify row belongs to this specific table (IDOR prevention)
+    const existingRow = await repo.findTableRowById(id, rowId);
+    if (!existingRow) {
+      return reply.status(404).send({ error: 'Row not found in this table' });
+    }
+
     const data = request.body as Record<string, any>;
     if (!data || typeof data !== 'object') {
       return reply.status(400).send({ error: 'Row data must be an object' });
     }
 
-    const updated = await repo.updateTableRow(rowId, data);
+    const validated = validateRowData(table.columns, data);
+    if (!validated.valid) {
+      return reply.status(400).send({ error: validated.error });
+    }
+
+    const updated = await repo.updateTableRow(id, rowId, validated.cleanData || data);
+    if (!updated) {
+      return reply.status(404).send({ error: 'Row not found in this table' });
+    }
     return { row: updated };
   });
 
@@ -219,7 +265,16 @@ export async function tableRoutes(app: FastifyInstance, repo: IRepository, authS
       return reply.status(403).send({ error: 'Editor access required to delete rows' });
     }
 
-    await repo.deleteTableRow(rowId);
+    // Verify row belongs to this specific table (IDOR prevention)
+    const existingRow = await repo.findTableRowById(id, rowId);
+    if (!existingRow) {
+      return reply.status(404).send({ error: 'Row not found in this table' });
+    }
+
+    const deleted = await repo.deleteTableRow(id, rowId);
+    if (!deleted) {
+      return reply.status(404).send({ error: 'Row not found in this table' });
+    }
     return { success: true };
   });
 }

@@ -82,10 +82,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
+  // Workspace creation modal (ST-037)
+  const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
+  const [newWorkspaceName, setNewWorkspaceName] = useState('');
+
   // Modals for Advanced Features
   const [showCommandBrowser, setShowCommandBrowser] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showDataTablesModal, setShowDataTablesModal] = useState(false);
+
+  // Debounced Autosave refs (ST-035)
+  const isInitialLoad = React.useRef(true);
+  const snippetLoadedRef = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    if (!selectedSnippetId) return;
+    if (snippetLoadedRef.current !== selectedSnippetId) {
+      snippetLoadedRef.current = selectedSnippetId;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      handleSaveSnippet();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [editName, editShortcut, editFolderId, editPlainContent, editDescription, editTags, editIsFavorite, editIsEnabled]);
 
   // Initial Data Load
   useEffect(() => {
@@ -128,6 +154,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const selectSnippet = (snippet: Snippet) => {
+    snippetLoadedRef.current = snippet.id;
     setSelectedSnippetId(snippet.id);
     setEditName(snippet.name);
     setEditShortcut(snippet.shortcut);
@@ -278,6 +305,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  const handleCreateWorkspace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWorkspaceName.trim()) return;
+
+    try {
+      const res = await api.createWorkspace({ name: newWorkspaceName.trim() });
+      setWorkspaces([...workspaces, { workspace: res.workspace, role: 'owner' }]);
+      setActiveWorkspaceId(res.workspace.id);
+      setSelectedSnippetId(null);
+      setSelectedFolderId('all');
+      setNewWorkspaceName('');
+      setShowNewWorkspaceModal(false);
+      await refreshData(res.workspace.id);
+    } catch (err: any) {
+      alert(err.message || 'Failed to create workspace');
+    }
+  };
+
   const handleDeleteFolder = async (folderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm('Delete this folder? Snippets inside will be safely moved to root.')) return;
@@ -355,6 +400,41 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }}>
         {/* Navigation Top */}
         <div style={{ padding: '16px 12px', overflowY: 'auto' }}>
+          {/* Workspace Selector (ST-037) */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Workspace
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ padding: '2px 4px', fontSize: 11 }}
+                onClick={() => setShowNewWorkspaceModal(true)}
+                title="Create Workspace"
+              >
+                <Plus size={13} />
+              </button>
+            </div>
+            <select
+              className="input"
+              style={{ fontSize: 13, padding: '4px 8px', width: '100%' }}
+              value={activeWorkspaceId}
+              onChange={async (e) => {
+                const newWsId = e.target.value;
+                setActiveWorkspaceId(newWsId);
+                setSelectedSnippetId(null);
+                setSelectedFolderId('all');
+                await refreshData(newWsId);
+              }}
+            >
+              {workspaces.map((w) => (
+                <option key={w.workspace.id} value={w.workspace.id}>
+                  {w.workspace.name} ({w.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Library
@@ -962,6 +1042,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <pre style={{ fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-subtle)', padding: 8, borderRadius: 4, whiteSpace: 'pre-wrap' }}>
                     {rev.plainContent}
                   </pre>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        if (confirm(`Restore version ${rev.version}?`)) {
+                          setEditName(rev.name);
+                          setEditShortcut(rev.shortcut);
+                          setEditPlainContent(rev.plainContent);
+                          setShowHistory(false);
+                        }
+                      }}
+                    >
+                      Restore this version
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1006,6 +1101,52 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </button>
               <button type="submit" className="btn btn-primary btn-sm">
                 Create Folder
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* New Workspace Modal (ST-037) */}
+      {showNewWorkspaceModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.35)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <form
+            onSubmit={handleCreateWorkspace}
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: 24,
+              width: 380
+            }}
+          >
+            <h4 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Create New Workspace</h4>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
+              Workspaces isolate snippets, folders, tables, and team members.
+            </p>
+            <input
+              type="text"
+              className="input"
+              placeholder="e.g. Tier 2 Support, EMEA Sales"
+              value={newWorkspaceName}
+              onChange={(e) => setNewWorkspaceName(e.target.value)}
+              autoFocus
+              style={{ marginBottom: 16 }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowNewWorkspaceModal(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary btn-sm">
+                Create Workspace
               </button>
             </div>
           </form>

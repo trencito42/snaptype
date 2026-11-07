@@ -2,7 +2,54 @@ import { ReverseShortcutMatcher, renderSnippet, extractFormFields } from '@snapt
 import { DomDetector, TextInserter, BrowserApi } from '@snaptype/browser-compat';
 import { Snippet, UserPreferences, DEFAULT_PREFERENCES, DynamicFormField } from '@snaptype/shared';
 
-class ContentEngine {
+/**
+ * Checks whether a snippet is allowed to expand on the current domain (ST-012)
+ */
+function isSnippetAllowedOnCurrentSite(snippet: Snippet, currentHostname: string): boolean {
+  if (!snippet.siteRestrictions || !snippet.siteRestrictions.mode || !snippet.siteRestrictions.domains?.length) {
+    return true;
+  }
+  const host = currentHostname.toLowerCase();
+  const domains = snippet.siteRestrictions.domains.map((d) => d.toLowerCase().trim()).filter(Boolean);
+  const matches = domains.some((d) => host === d || host.endsWith('.' + d));
+
+  if (snippet.siteRestrictions.mode === 'allow') {
+    return matches;
+  }
+  if (snippet.siteRestrictions.mode === 'block') {
+    return !matches;
+  }
+  return true;
+}
+
+/**
+ * Helper to match user-configured hotkey string (ST-011)
+ * Example: 'Ctrl+Shift+Space', 'Alt+Shift+S', 'Meta+K'
+ */
+function isMatchingHotkey(e: KeyboardEvent, shortcutStr?: string): boolean {
+  const hotkey = (shortcutStr || 'Ctrl+Shift+Space').toLowerCase();
+  const parts = hotkey.split('+').map((p) => p.trim());
+
+  const expectCtrl = parts.includes('ctrl') || parts.includes('control');
+  const expectShift = parts.includes('shift');
+  const expectAlt = parts.includes('alt');
+  const expectMeta = parts.includes('meta') || parts.includes('cmd') || parts.includes('command');
+
+  if (e.ctrlKey !== expectCtrl) return false;
+  if (e.shiftKey !== expectShift) return false;
+  if (e.altKey !== expectAlt) return false;
+  if (e.metaKey !== expectMeta) return false;
+
+  const keyPart = parts.find((p) => !['ctrl', 'control', 'shift', 'alt', 'meta', 'cmd', 'command'].includes(p)) || 'space';
+
+  if (keyPart === 'space' && (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar')) {
+    return true;
+  }
+
+  return e.key.toLowerCase() === keyPart || e.code.toLowerCase() === `key${keyPart}`;
+}
+
+export class ContentEngine {
   private matcher: ReverseShortcutMatcher = new ReverseShortcutMatcher();
   private snippets: Snippet[] = [];
   private preferences: UserPreferences = { ...DEFAULT_PREFERENCES };
@@ -22,26 +69,25 @@ class ContentEngine {
   }
 
   private async init() {
-    // 1. Fetch synced snippets and preferences from background
-    await this.refreshData();
-
-    // 2. Check domain exclusion
-    const hostname = window.location.hostname || '';
-    if (DomDetector.isExcludedDomain(hostname, this.preferences.excludedDomains)) {
-      this.isExcluded = true;
-      return;
-    }
-
-    // 3. Attach global listeners
+    // 1. Always attach event listeners first so domain exclusions can be reactive (ST-013)
     this.attachEventListeners();
+
+    // 2. Fetch synced snippets and preferences from background
+    await this.refreshData();
   }
 
-  private async refreshData() {
+  public updateExclusionStatus() {
+    const hostname = window.location.hostname || '';
+    this.isExcluded = DomDetector.isExcludedDomain(hostname, this.preferences.excludedDomains);
+  }
+
+  public async refreshData() {
     try {
       const response = await BrowserApi.sendMessage({ action: 'GET_DATA' });
       if (response && response.snippets) {
         this.snippets = response.snippets;
         this.preferences = response.preferences || this.preferences;
+        this.updateExclusionStatus();
         this.matcher.rebuild(this.snippets, this.preferences.caseSensitive);
       }
     } catch {
@@ -51,15 +97,22 @@ class ContentEngine {
 
   private attachEventListeners() {
     // Track active element and clear buffer on selection/focus change
-    document.addEventListener('focusin', (e) => {
-      this.activeTarget = e.target as HTMLElement;
-      this.keystrokeBuffer = '';
-    }, true);
+    document.addEventListener(
+      'focusin',
+      (e) => {
+        this.activeTarget = e.target as HTMLElement;
+        this.keystrokeBuffer = '';
+      },
+      true
+    );
 
-    document.addEventListener('click', (e) => {
-      // If clicking outside assistant or form, clear buffer
-      this.keystrokeBuffer = '';
-    }, true);
+    document.addEventListener(
+      'click',
+      () => {
+        this.keystrokeBuffer = '';
+      },
+      true
+    );
 
     // Keystroke listening
     document.addEventListener('keydown', (e) => this.handleKeyDown(e), true);
@@ -91,8 +144,8 @@ class ContentEngine {
   private handleKeyDown(e: KeyboardEvent) {
     if (this.isExcluded) return;
 
-    // Check Assistant hotkey: Ctrl+Shift+Space (or configured hotkey)
-    if (e.ctrlKey && e.shiftKey && (e.code === 'Space' || e.key === ' ')) {
+    // Check Assistant hotkey: supports user preference (ST-011)
+    if (isMatchingHotkey(e, this.preferences.assistantShortcut)) {
       e.preventDefault();
       e.stopPropagation();
       this.openAssistant();
@@ -109,6 +162,11 @@ class ContentEngine {
 
   private handleInput(e: Event) {
     if (this.isExcluded) return;
+
+    // Guard against synthetic input events dispatched by SnapType itself (ST-016)
+    if (TextInserter.isProgrammaticInsert || (e as any).__snaptype_synthetic) {
+      return;
+    }
 
     const target = (e.target || this.activeTarget) as HTMLElement;
     if (!target) return;
@@ -134,7 +192,13 @@ class ContentEngine {
     const match = this.matcher.findMatch(this.keystrokeBuffer, this.preferences);
     if (!match) return;
 
-    // We found a matching shortcut!
+    // Verify per-snippet site restrictions (ST-012)
+    const hostname = window.location.hostname || '';
+    if (!isSnippetAllowedOnCurrentSite(match.snippet, hostname)) {
+      return;
+    }
+
+    // Found matching shortcut
     this.keystrokeBuffer = ''; // Reset buffer to prevent re-triggering
 
     const snippet = match.snippet;
@@ -145,20 +209,35 @@ class ContentEngine {
       this.openDynamicForm(target, snippet, dynamicFields, match.matchLength);
     } else {
       // Plain/static replacement: insert immediately
-      const rendered = renderSnippet(snippet.plainContent);
+      const rendered = this.renderSnippetWithContext(snippet.plainContent);
       TextInserter.insert(target, {
         matchLength: match.matchLength,
         replacementText: rendered.text,
         cursorOffset: rendered.cursorOffset
       });
 
-      // Record usage asynchronously in background
+      // Record usage asynchronously in background (ST-010)
       BrowserApi.sendMessage({ action: 'RECORD_USAGE', snippetId: snippet.id });
     }
   }
 
+  private renderSnippetWithContext(template: string, variables: Record<string, any> = {}) {
+    return renderSnippet(template, {
+      variables,
+      siteContext: {
+        url: window.location.href,
+        hostname: window.location.hostname
+      },
+      selectedText: window.getSelection()?.toString() || '',
+      snippetResolver: (shortcut: string) => {
+        const found = this.snippets.find((s) => s.shortcut.toLowerCase() === shortcut.toLowerCase());
+        return found ? found.plainContent : null;
+      }
+    });
+  }
+
   /**
-   * Interactive Dynamic Form Dialog
+   * Interactive Dynamic Form Dialog (ST-015: supports checkboxes, dates, validation)
    */
   private openDynamicForm(target: HTMLElement, snippet: Snippet, fields: DynamicFormField[], matchLength: number) {
     if (this.formOverlay) this.formOverlay.remove();
@@ -184,43 +263,85 @@ class ContentEngine {
     form.className = 'snaptype-form-body';
 
     const inputs: Record<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> = {};
+    const fieldDefs: Record<string, DynamicFormField> = {};
+    const errorContainers: Record<string, HTMLElement> = {};
 
     for (const field of fields) {
+      fieldDefs[field.name] = field;
       const row = document.createElement('div');
       row.className = 'snaptype-form-row';
 
       const label = document.createElement('label');
       label.textContent = field.label || field.name;
+      if (field.required) {
+        const reqSpan = document.createElement('span');
+        reqSpan.style.color = '#e53e3e';
+        reqSpan.textContent = ' *';
+        label.appendChild(reqSpan);
+      }
       row.appendChild(label);
 
       let inputEl: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
-      if (field.type === 'dropdown') {
+      if (field.type === 'toggle') {
+        const checkboxWrapper = document.createElement('div');
+        checkboxWrapper.style.display = 'flex';
+        checkboxWrapper.style.alignItems = 'center';
+        checkboxWrapper.style.gap = '8px';
+
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.className = 'snaptype-checkbox';
+        chk.checked = Boolean(field.defaultValue);
+        inputEl = chk;
+
+        const checkLabel = document.createElement('span');
+        checkLabel.textContent = field.defaultValue ? 'Enabled' : 'Disabled';
+        chk.onchange = () => {
+          checkLabel.textContent = chk.checked ? 'Enabled' : 'Disabled';
+        };
+
+        checkboxWrapper.appendChild(chk);
+        checkboxWrapper.appendChild(checkLabel);
+        row.appendChild(checkboxWrapper);
+      } else if (field.type === 'dropdown') {
         const select = document.createElement('select');
         select.className = 'snaptype-input';
         for (const opt of field.options || []) {
           const optEl = document.createElement('option');
           optEl.value = opt;
           optEl.textContent = opt;
+          if (field.defaultValue === opt) optEl.selected = true;
           select.appendChild(optEl);
         }
         inputEl = select;
+        row.appendChild(inputEl);
       } else if (field.type === 'paragraph') {
         const ta = document.createElement('textarea');
         ta.className = 'snaptype-input';
         ta.rows = 3;
         ta.value = String(field.defaultValue || '');
         inputEl = ta;
+        row.appendChild(inputEl);
       } else {
         const inp = document.createElement('input');
         inp.className = 'snaptype-input';
         inp.type = field.type === 'date' ? 'date' : 'text';
         inp.value = String(field.defaultValue || '');
         inputEl = inp;
+        row.appendChild(inputEl);
       }
 
+      const errSpan = document.createElement('div');
+      errSpan.className = 'snaptype-form-error';
+      errSpan.style.color = '#e53e3e';
+      errSpan.style.fontSize = '12px';
+      errSpan.style.marginTop = '4px';
+      errSpan.style.display = 'none';
+      errorContainers[field.name] = errSpan;
+      row.appendChild(errSpan);
+
       inputs[field.name] = inputEl;
-      row.appendChild(inputEl);
       form.appendChild(row);
     }
 
@@ -240,13 +361,39 @@ class ContentEngine {
     submitBtn.textContent = 'Insert Snippet (Enter)';
 
     const applyValues = () => {
+      let hasError = false;
       const vars: Record<string, any> = {};
+
       for (const [k, el] of Object.entries(inputs)) {
-        vars[k] = el.value;
+        const def = fieldDefs[k];
+        const errEl = errorContainers[k];
+        if (errEl) errEl.style.display = 'none';
+
+        let val: any;
+        if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+          val = el.checked;
+        } else {
+          val = el.value.trim();
+        }
+
+        // Validate required fields (ST-015)
+        if (def && def.required && (!val || (typeof val === 'string' && val.length === 0))) {
+          hasError = true;
+          if (errEl) {
+            errEl.textContent = `${def.label || def.name} is required.`;
+            errEl.style.display = 'block';
+          }
+          el.focus();
+        }
+
+        vars[k] = val;
       }
+
+      if (hasError) return;
+
       overlay.remove();
 
-      const rendered = renderSnippet(snippet.plainContent, { variables: vars });
+      const rendered = this.renderSnippetWithContext(snippet.plainContent, vars);
       TextInserter.insert(target, {
         matchLength,
         replacementText: rendered.text,
@@ -282,7 +429,7 @@ class ContentEngine {
   }
 
   /**
-   * Compact Floating Keyboard Assistant with Reliable Target Preservation (P0.4 & P0.7)
+   * Compact Floating Keyboard Assistant with Range & Focus Preservation and Low-End Optimization (ST-014 & ST-020)
    */
   private openAssistant() {
     if (this.assistantOverlay) {
@@ -291,7 +438,7 @@ class ContentEngine {
       return;
     }
 
-    // 1. Snapshot original active editable target BEFORE focus moves to search input
+    // 1. Snapshot original active target AND Range/Selection before focus shifts (ST-014)
     const currentActive = DomDetector.getActiveElement();
     let originalTarget: HTMLElement | null = null;
     if (currentActive) {
@@ -305,6 +452,23 @@ class ContentEngine {
       if (inspected.category !== 'none') {
         originalTarget = this.activeTarget;
       }
+    }
+
+    let savedRange: Range | null = null;
+    let savedSelectionStart = -1;
+    let savedSelectionEnd = -1;
+
+    try {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        savedRange = sel.getRangeAt(0).cloneRange();
+      }
+      if (originalTarget instanceof HTMLInputElement || originalTarget instanceof HTMLTextAreaElement) {
+        savedSelectionStart = originalTarget.selectionStart ?? -1;
+        savedSelectionEnd = originalTarget.selectionEnd ?? -1;
+      }
+    } catch {
+      // Ignore selection snapshot error
     }
 
     const overlay = document.createElement('div');
@@ -327,8 +491,13 @@ class ContentEngine {
     document.body.appendChild(overlay);
     this.assistantOverlay = overlay;
 
+    // Filter by allowed domain (ST-012)
+    const hostname = window.location.hostname || '';
+    const availableSnippets = this.snippets.filter((s) => isSnippetAllowedOnCurrentSite(s, hostname));
+
     let selectedIndex = 0;
-    let filteredList: Snippet[] = [...this.snippets];
+    let filteredList: Snippet[] = [...availableSnippets];
+    const MAX_RENDERED_ITEMS = 25; // ST-020: Memory optimization for low-end PCs
 
     const renderList = () => {
       listContainer.innerHTML = '';
@@ -340,11 +509,12 @@ class ContentEngine {
         return;
       }
 
-      filteredList.forEach((snip, idx) => {
+      const visibleSlice = filteredList.slice(0, MAX_RENDERED_ITEMS);
+
+      visibleSlice.forEach((snip, idx) => {
         const item = document.createElement('div');
         item.className = `snaptype-assistant-item ${idx === selectedIndex ? 'selected' : ''}`;
 
-        // Safe DOM elements preventing HTML injection (P0.7)
         const titleEl = document.createElement('div');
         titleEl.className = 'snaptype-item-title';
         titleEl.textContent = snip.name;
@@ -358,26 +528,53 @@ class ContentEngine {
         item.onclick = () => insertAssistantSnippet(snip);
         listContainer.appendChild(item);
       });
+
+      if (filteredList.length > MAX_RENDERED_ITEMS) {
+        const moreNotice = document.createElement('div');
+        moreNotice.className = 'snaptype-assistant-more';
+        moreNotice.style.padding = '8px 12px';
+        moreNotice.style.fontSize = '11px';
+        moreNotice.style.color = '#888';
+        moreNotice.style.textAlign = 'center';
+        moreNotice.textContent = `Showing 25 of ${filteredList.length} snippets. Type to filter...`;
+        listContainer.appendChild(moreNotice);
+      }
     };
 
     const insertAssistantSnippet = (snip: Snippet) => {
       overlay.remove();
       this.assistantOverlay = null;
 
-      // Ensure we NEVER insert into the assistant search input
       const target = originalTarget || this.activeTarget;
       if (!target || target === searchInput || !document.contains(target)) {
         return;
       }
 
-      // Restore focus to original target
+      // Restore focus and precise Range/Caret position (ST-014)
       target.focus();
+      try {
+        if (savedRange && window.getSelection) {
+          const sel = window.getSelection();
+          if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(savedRange);
+          }
+        } else if (
+          (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
+          savedSelectionStart >= 0 &&
+          savedSelectionEnd >= 0
+        ) {
+          target.setSelectionRange(savedSelectionStart, savedSelectionEnd);
+        }
+      } catch {
+        // Fallback to active focus
+      }
 
       const dynamicFields = extractFormFields(snip.plainContent);
       if (dynamicFields.length > 0) {
         this.openDynamicForm(target, snip, dynamicFields, 0);
       } else {
-        const rendered = renderSnippet(snip.plainContent);
+        const rendered = this.renderSnippetWithContext(snip.plainContent);
         TextInserter.insert(target, {
           matchLength: 0,
           replacementText: rendered.text,
@@ -390,12 +587,13 @@ class ContentEngine {
     searchInput.addEventListener('input', () => {
       const q = searchInput.value.toLowerCase().trim();
       if (!q) {
-        filteredList = [...this.snippets];
+        filteredList = [...availableSnippets];
       } else {
-        filteredList = this.snippets.filter((s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.shortcut.toLowerCase().includes(q) ||
-          s.plainContent.toLowerCase().includes(q)
+        filteredList = availableSnippets.filter(
+          (s) =>
+            s.name.toLowerCase().includes(q) ||
+            s.shortcut.toLowerCase().includes(q) ||
+            s.plainContent.toLowerCase().includes(q)
         );
       }
       selectedIndex = 0;
@@ -405,7 +603,8 @@ class ContentEngine {
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        selectedIndex = Math.min(selectedIndex + 1, filteredList.length - 1);
+        const maxIdx = Math.min(filteredList.length - 1, MAX_RENDERED_ITEMS - 1);
+        selectedIndex = Math.min(selectedIndex + 1, maxIdx);
         renderList();
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -419,7 +618,7 @@ class ContentEngine {
       } else if (e.key === 'Escape') {
         overlay.remove();
         this.assistantOverlay = null;
-        if (this.activeTarget) this.activeTarget.focus();
+        if (originalTarget) originalTarget.focus();
       }
     });
 
@@ -439,4 +638,3 @@ class ContentEngine {
 if (typeof document !== 'undefined') {
   new ContentEngine();
 }
-

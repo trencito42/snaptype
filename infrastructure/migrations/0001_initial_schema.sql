@@ -180,4 +180,22 @@ CREATE TABLE IF NOT EXISTS `data_rows` (
   CONSTRAINT `fk_data_rows_table` FOREIGN KEY (`table_id`) REFERENCES `data_tables` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `workspace_invitations` (
+  `id` VARCHAR(36) NOT NULL,
+  `workspace_id` VARCHAR(36) NOT NULL,
+  `email` VARCHAR(255) NOT NULL,
+  `role` VARCHAR(20) NOT NULL DEFAULT 'editor',
+  `token` VARCHAR(64) NOT NULL,
+  `invited_by_id` VARCHAR(36) NOT NULL,
+  `expires_at` TIMESTAMP NOT NULL,
+  `accepted_at` TIMESTAMP NULL,
+  `revoked_at` TIMESTAMP NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_invitation_token` (`token`),
+  KEY `idx_invitations_workspace` (`workspace_id`),
+  CONSTRAINT `fk_invitations_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_invitations_invited_by` FOREIGN KEY (`invited_by_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
