@@ -281,7 +281,7 @@ btnSyncNow?.addEventListener('click', async () => {
   await BrowserApi.sendMessage({ action: 'SYNC_NOW' });
   const data = await BrowserApi.sendMessage({ action: 'GET_DATA' });
   showMainView(data);
-  btnSyncNow.textContent = '🔄 Sync';
+  btnSyncNow.textContent = 'Sync';
 });
 
 // Open Dashboard

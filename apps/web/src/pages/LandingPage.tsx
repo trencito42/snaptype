@@ -1,8 +1,12 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ReverseShortcutMatcher, renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
 import type { Snippet, DynamicFormField } from '@snaptype/shared';
-import { ArrowRight, FolderTree, RefreshCw, Users, Braces } from 'lucide-react';
-import { LogoMark } from '../components/Logo.js';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faArrowRight, faWandMagicSparkles, faFolderTree, faRotate, faUserGroup, faShieldHalved,
+  faKeyboard, faCircleCheck, faPuzzlePiece
+} from '@fortawesome/free-solid-svg-icons';
+import { faChrome, faFirefoxBrowser } from '@fortawesome/free-brands-svg-icons';
 import './landing.css';
 
 interface LandingPageProps {
@@ -19,7 +23,7 @@ function demoSnippet(id: string, name: string, shortcut: string, plainContent: s
   } as Snippet;
 }
 
-/** These are rendered by the SAME engine the extension uses. */
+/** Rendered by the SAME engine the extension uses. */
 const DEMO_SNIPPETS: Snippet[] = [
   demoSnippet('d1', 'Order delay apology', '/late',
     'Hi {{input:customer|label=Customer name|default=there}},\n\nI am sorry your order is late. I checked with our warehouse and it will ship within {{dropdown:days|label=Ships within|options=1 business day,2 business days,3 business days}}.\n\nIf anything changes, I will let you know right away.\n\n{{cursor}}'),
@@ -28,11 +32,56 @@ const DEMO_SNIPPETS: Snippet[] = [
   demoSnippet('d3', 'Request details', '/info',
     'To look into this, could you please send me your order number and the email address used at checkout?')
 ];
-
 const EXAMPLES = ['/late', '/thx', '/info'];
+
+/** Command tiles: the output shown is computed live by the real renderer, not typed by hand. */
+const COMMAND_TILES: { code: string; note: string }[] = [
+  { code: '{{date}}', note: 'Today' },
+  { code: '{{date:+7d}}', note: 'A week from now' },
+  { code: '{{time}}', note: 'Current time' },
+  { code: '{{clipboard}}', note: 'Whatever you copied' },
+  { code: '{{selection}}', note: 'Text you highlighted' },
+  { code: '{{calc: 19.99 * 3}}', note: 'Arithmetic' },
+  { code: '{{#if vip}}Priority{{else}}Standard{{/if}}', note: 'Conditions' },
+  { code: '{{include:signature}}', note: 'Reuse another snippet' },
+  { code: '{{table:customers|lookup=email|value=ana@example.com|column=name}}', note: 'Data Table lookup' },
+  { code: '{{site:hostname}}', note: 'The site you are on' }
+];
+
+function useTileOutputs() {
+  return useMemo(() => {
+    const ctx = {
+      variables: { vip: true },
+      clipboardText: 'ORDER-4821',
+      selectedText: 'late delivery',
+      siteContext: { hostname: 'help.example.com', url: 'https://help.example.com/tickets/4821' },
+      snippetResolver: (s: string) => (s === 'signature' ? 'Kind regards, Support Team' : null),
+      tableResolver: (t: string, _k: string, v: string, col: string) => (t === 'customers' && v === 'ana@example.com' && col === 'name' ? 'Ana Pop' : null)
+    };
+    return COMMAND_TILES.map((t) => {
+      const out = renderSnippet(t.code, ctx);
+      return { ...t, out: (out.errors && out.errors.length) ? '—' : out.text };
+    });
+  }, []);
+}
+
+const BENEFITS = [
+  { icon: faWandMagicSparkles, title: 'Dynamic snippets', body: 'Fill-in fields, dropdowns, dates, clipboard, conditions and simple formulas, so one snippet fits many replies.' },
+  { icon: faFolderTree, title: 'Organised library', body: 'Folders, tags, search, favourites and per-site rules. Import and export whenever you need.' },
+  { icon: faRotate, title: 'Synced across browsers', body: 'Snippets live in your account and are fetched by the extension when you sign in.' },
+  { icon: faUserGroup, title: 'Shared workspaces', body: 'Invite teammates as owner, admin, editor or viewer and keep one library for the whole team.' }
+];
+
+const STEPS = [
+  { n: '01', title: 'Create an account', body: 'Sign in with a one-time code sent to your email. No password to remember.' },
+  { n: '02', title: 'Install the extension', body: 'Add SnapType to Chrome or Firefox and sign in once.' },
+  { n: '03', title: 'Write a snippet', body: 'Give it a name and a short shortcut in the dashboard.' },
+  { n: '04', title: 'Type the shortcut', body: 'In any text field the shortcut turns into the full text.' }
+];
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth, onNavigate }) => {
   const matcher = useMemo(() => new ReverseShortcutMatcher(DEMO_SNIPPETS, false), []);
+  const tiles = useTileOutputs();
   const [text, setText] = useState('');
   const [form, setForm] = useState<{ snippet: Snippet; fields: DynamicFormField[]; matchLength: number } | null>(null);
   const [values, setValues] = useState<Record<string, string | boolean>>({});
@@ -51,8 +100,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth, onNavigate
     });
   };
 
-  const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
+  const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => handleValue(e.target.value);
+  const handleValue = (val: string) => {
     const match = matcher.findMatch(val, {
       triggerMode: 'immediate', delimiterChar: '/', caseSensitive: false,
       assistantShortcut: 'Ctrl+Shift+Space', excludedDomains: [], disabledInSensitiveFields: true
@@ -70,121 +119,169 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth, onNavigate
     }
   };
 
-  const submitForm = () => {
-    if (!form) return;
-    expand(text, form.snippet, form.matchLength, values);
-    setForm(null);
-  };
+  const submitForm = () => { if (!form) return; expand(text, form.snippet, form.matchLength, values); setForm(null); };
   const cancelForm = () => { setForm(null); areaRef.current?.focus(); };
-
   useEffect(() => { dialogRef.current?.querySelector<HTMLElement>('input,select')?.focus(); }, [form]);
-
-  const insertExample = (s: string) => {
-    setText(''); setForm(null);
-    const el = areaRef.current;
-    if (el) { el.focus(); }
-    // Feed the shortcut through the same path real typing uses.
-    onChange({ target: { value: s } } as React.ChangeEvent<HTMLTextAreaElement>);
-  };
+  const insertExample = (s: string) => { setText(''); setForm(null); handleValue(s); };
 
   return (
     <div className="lp">
       <section className="lp-hero">
-        <p className="lp-eyebrow"><LogoMark size={18} /> Text expansion for browsers</p>
+        <p className="lp-eyebrow"><FontAwesomeIcon icon={faKeyboard} aria-hidden="true" /> Text expansion for your browser</p>
         <h1>Type a short code.<br />Send the whole reply.</h1>
         <p className="lp-lede">
-          SnapType turns shortcuts like <code>/late</code> into complete, consistent messages in any web text field.
-          Keep your snippets in one place and use them in Chrome and Firefox.
+          SnapType turns shortcuts like <code>/late</code> into complete, consistent messages in any web text field,
+          in Chrome and Firefox.
         </p>
         <div className="lp-cta">
-          <button className="lp-btn lp-btn-primary" onClick={onOpenAuth}>Create an account <ArrowRight size={18} aria-hidden="true" /></button>
-          <button className="lp-btn" onClick={() => onNavigate('install')}>Install the extension</button>
+          <button className="pill pill-lime pill-lg" onClick={onOpenAuth}>Create an account <FontAwesomeIcon icon={faArrowRight} aria-hidden="true" /></button>
+          <button className="pill pill-white pill-lg" onClick={() => onNavigate('install')}>Install the extension</button>
         </div>
-        <p className="lp-note">Chrome / Chromium and Firefox. Store listings are not published yet — see install steps.</p>
+        <p className="lp-note">Chrome, Edge, Brave and Firefox. Store listings are not published yet, see the install steps.</p>
       </section>
 
-      <section className="lp-demo" aria-labelledby="demo-h">
-        <div className="lp-demo-head">
-          <h2 id="demo-h">Try it here — nothing to install</h2>
-          <p>Type a shortcut, or press one below. This runs the same expansion engine as the extension.</p>
-          <div className="lp-chips" role="group" aria-label="Example shortcuts">
-            {EXAMPLES.map((s) => (
-              <button key={s} className="lp-chip" onClick={() => insertExample(s)}>{s}</button>
-            ))}
+      <section className="lp-stage" aria-labelledby="demo-h">
+        <div className="lp-float lp-float-1" aria-hidden="true">{'{{date}}'}</div>
+        <div className="lp-float lp-float-2" aria-hidden="true">{'{{cursor}}'}</div>
+        <div className="lp-device">
+          <div className="lp-device-bar">
+            <span className="lp-dots" aria-hidden="true"><i /><i /><i /></span>
+            <h2 id="demo-h">Try it here. Nothing to install.</h2>
           </div>
-        </div>
-        <label htmlFor="demo-area" className="lp-sr">Demo message field</label>
-        <textarea
-          id="demo-area" ref={areaRef} className="lp-area" rows={9}
-          placeholder="Reply to customer… try typing /thx"
-          value={text} onChange={onChange}
-        />
-        <div className="lp-demo-foot">
-          <span>Undo with Ctrl+Z is not available in this demo.</span>
-          {text && <button className="lp-link" onClick={() => setText('')}>Clear</button>}
-        </div>
-
-        {form && (
-          <div className="lp-overlay" onKeyDown={(e) => { if (e.key === 'Escape') cancelForm(); }}>
-            <div className="lp-dialog" role="dialog" aria-modal="true" aria-labelledby="form-h" ref={dialogRef}>
-              <h3 id="form-h">{form.snippet.name}</h3>
-              <p>Fill in the details for this reply.</p>
-              {form.fields.map((f) => (
-                <div className="lp-field" key={f.name}>
-                  <label htmlFor={`f-${f.name}`}>{f.label}</label>
-                  {f.type === 'dropdown' ? (
-                    <select id={`f-${f.name}`} value={String(values[f.name] ?? '')}
-                      onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}>
-                      {(f.options ?? []).map((o) => <option key={o}>{o}</option>)}
-                    </select>
-                  ) : (
-                    <input id={`f-${f.name}`} type="text" value={String(values[f.name] ?? '')}
-                      onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
-                      onKeyDown={(e) => { if (e.key === 'Enter') submitForm(); }} />
-                  )}
-                </div>
+          <div className="lp-device-body">
+            <div className="lp-chips" role="group" aria-label="Example shortcuts">
+              <span className="lp-chip-label">Type or tap:</span>
+              {EXAMPLES.map((s) => (
+                <button key={s} className="lp-chip" onClick={() => insertExample(s)}>{s}</button>
               ))}
-              <div className="lp-dialog-actions">
-                <button className="lp-btn" onClick={cancelForm}>Cancel</button>
-                <button className="lp-btn lp-btn-primary" onClick={submitForm}>Insert</button>
-              </div>
+            </div>
+            <label htmlFor="demo-area" className="lp-sr">Demo message field</label>
+            <textarea
+              id="demo-area" ref={areaRef} className="lp-area" rows={9}
+              placeholder="Reply to customer… try typing /thx"
+              value={text} onChange={onChange}
+            />
+            <div className="lp-device-foot">
+              <span>Runs the same engine as the extension.</span>
+              {text && <button className="lp-link" onClick={() => setText('')}>Clear</button>}
             </div>
           </div>
-        )}
+
+          {form && (
+            <div className="lp-overlay" onKeyDown={(e) => { if (e.key === 'Escape') cancelForm(); }}>
+              <div className="lp-dialog" role="dialog" aria-modal="true" aria-labelledby="form-h" ref={dialogRef}>
+                <h3 id="form-h">{form.snippet.name}</h3>
+                <p>Fill in the details for this reply.</p>
+                {form.fields.map((f) => (
+                  <div className="lp-field" key={f.name}>
+                    <label htmlFor={`f-${f.name}`}>{f.label}</label>
+                    {f.type === 'dropdown' ? (
+                      <select id={`f-${f.name}`} value={String(values[f.name] ?? '')}
+                        onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}>
+                        {(f.options ?? []).map((o) => <option key={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <input id={`f-${f.name}`} type="text" value={String(values[f.name] ?? '')}
+                        onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') submitForm(); }} />
+                    )}
+                  </div>
+                ))}
+                <div className="lp-dialog-actions">
+                  <button className="pill pill-white" onClick={cancelForm}>Cancel</button>
+                  <button className="pill pill-lime" onClick={submitForm}>Insert</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="lp-float lp-float-3" aria-hidden="true">{'{{calc: 19.99 * 3}}'}</div>
       </section>
 
-      <section className="lp-steps" aria-labelledby="how-h">
-        <h2 id="how-h">Up and running in four steps</h2>
-        <ol>
-          <li><strong>Create an account.</strong> Sign in with a one-time code sent to your email — no password.</li>
-          <li><strong>Install the extension</strong> for Chrome or Firefox and sign in.</li>
-          <li><strong>Write a snippet</strong> in the dashboard and give it a shortcut.</li>
-          <li><strong>Type the shortcut</strong> in any text field. It expands in place.</li>
-        </ol>
-      </section>
-
-      <section className="lp-features" aria-labelledby="feat-h">
-        <h2 id="feat-h">What you get</h2>
-        <ul>
-          <li><Braces aria-hidden="true" /><div><h3>Dynamic snippets</h3><p>Fill-in fields, dropdowns, dates, clipboard, cursor placement, conditions and simple formulas.</p></div></li>
-          <li><FolderTree aria-hidden="true" /><div><h3>Organised library</h3><p>Folders, tags, search, favourites and per-site restrictions. Import and export your snippets.</p></div></li>
-          <li><RefreshCw aria-hidden="true" /><div><h3>Synced across browsers</h3><p>Snippets live in your account and are fetched by the extension when you sign in.</p></div></li>
-          <li><Users aria-hidden="true" /><div><h3>Shared workspaces</h3><p>Invite teammates as owner, admin, editor or viewer so a team can share one library.</p></div></li>
+      <section className="lp-split" aria-labelledby="ben-h">
+        <div className="lp-split-lead">
+          <p className="lp-kicker">Benefits</p>
+          <h2 id="ben-h">Everything a support team reuses, in one place.</h2>
+          <p>Write each answer once, keep it up to date, and let everyone send it with a few keystrokes.</p>
+          <button className="pill pill-lime" onClick={onOpenAuth}>Get started</button>
+        </div>
+        <ul className="lp-cards">
+          {BENEFITS.map((b) => (
+            <li key={b.title} className="lp-card">
+              <span className="lp-icon"><FontAwesomeIcon icon={b.icon} aria-hidden="true" /></span>
+              <h3>{b.title}</h3>
+              <p>{b.body}</p>
+            </li>
+          ))}
         </ul>
       </section>
 
+      <section className="lp-block" aria-labelledby="cmd-h">
+        <p className="lp-kicker">Commands</p>
+        <h2 id="cmd-h">Snippets that adapt to the moment.</h2>
+        <p className="lp-sub">Each result below is produced live by the real renderer.</p>
+        <ul className="lp-tiles">
+          {tiles.map((t) => (
+            <li key={t.code} className="lp-tile">
+              <code>{t.code}</code>
+              <span className="lp-tile-out">{t.out}</span>
+              <span className="lp-tile-note">{t.note}</span>
+            </li>
+          ))}
+          <li className="lp-tile lp-tile-form">
+            <code>{'{{form:name}}'}</code>
+            <span className="lp-tile-out">Opens a small fill-in form</span>
+            <span className="lp-tile-note">Text, paragraph, dropdown, toggle, date</span>
+          </li>
+        </ul>
+      </section>
+
+      <section className="lp-block" aria-labelledby="how-h">
+        <p className="lp-kicker">How it works</p>
+        <h2 id="how-h">Up and running in four steps.</h2>
+        <ol className="lp-steps">
+          {STEPS.map((s) => (
+            <li key={s.n}><span className="lp-step-n">{s.n}</span><h3>{s.title}</h3><p>{s.body}</p></li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="lp-block" aria-labelledby="br-h">
+        <p className="lp-kicker">Browsers</p>
+        <h2 id="br-h">Chrome and Firefox.</h2>
+        <div className="lp-browsers">
+          <article className="lp-card lp-browser">
+            <FontAwesomeIcon icon={faChrome} className="lp-browser-icon" aria-hidden="true" />
+            <h3>Chrome, Edge, Brave</h3>
+            <p>Manifest V3 extension. Not in the Chrome Web Store yet.</p>
+            <button className="pill pill-white" onClick={() => onNavigate('install')}>Install steps</button>
+          </article>
+          <article className="lp-card lp-browser">
+            <FontAwesomeIcon icon={faFirefoxBrowser} className="lp-browser-icon" aria-hidden="true" />
+            <h3>Firefox</h3>
+            <p>Manifest V3 add-on. Not on Mozilla Add-ons yet.</p>
+            <button className="pill pill-white" onClick={() => onNavigate('install')}>Install steps</button>
+          </article>
+        </div>
+      </section>
+
       <section className="lp-trust" aria-labelledby="trust-h">
-        <h2 id="trust-h">How your data is handled</h2>
-        <p>
-          Snippets are stored on the SnapType server so they can sync, and the extension talks to that server over the network.
-          Matching of what you type happens locally in your browser; keystrokes are not sent to the server.
-          The extension skips password fields and other sensitive inputs. Read the full <button className="lp-link" onClick={() => onNavigate('privacy')}>privacy policy</button>.
-        </p>
+        <span className="lp-icon lp-icon-lg"><FontAwesomeIcon icon={faShieldHalved} aria-hidden="true" /></span>
+        <div>
+          <h2 id="trust-h">How your data is handled</h2>
+          <ul>
+            <li><FontAwesomeIcon icon={faCircleCheck} aria-hidden="true" /> Snippets are stored on the SnapType server so they can sync to your browsers.</li>
+            <li><FontAwesomeIcon icon={faCircleCheck} aria-hidden="true" /> Matching of what you type happens locally. Keystrokes are not sent to the server.</li>
+            <li><FontAwesomeIcon icon={faCircleCheck} aria-hidden="true" /> Password fields and other sensitive inputs are skipped.</li>
+          </ul>
+          <button className="lp-link" onClick={() => onNavigate('privacy')}>Read the privacy policy</button>
+        </div>
       </section>
 
       <section className="lp-final">
+        <FontAwesomeIcon icon={faPuzzlePiece} aria-hidden="true" className="lp-final-icon" />
         <h2>Write it once. Reuse it everywhere.</h2>
-        <button className="lp-btn lp-btn-primary" onClick={onOpenAuth}>Create an account <ArrowRight size={18} aria-hidden="true" /></button>
+        <button className="pill pill-dark pill-lg" onClick={onOpenAuth}>Create an account <FontAwesomeIcon icon={faArrowRight} aria-hidden="true" /></button>
       </section>
     </div>
   );

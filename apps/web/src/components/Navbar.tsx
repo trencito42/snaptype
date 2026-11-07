@@ -1,5 +1,6 @@
 import React from 'react';
-import { Download, LogIn, LayoutDashboard } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGrip, faRightToBracket } from '@fortawesome/free-solid-svg-icons';
 import { LogoMark, Wordmark } from './Logo.js';
 
 interface NavbarProps {
@@ -12,32 +13,34 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, isAuthenticated, onOpenAuth, onLogout }) => (
   <header className="site-header">
-    <button className="brand" onClick={() => onNavigate('landing')} aria-label="SnapType home">
-      <LogoMark size={30} />
-      <Wordmark />
-    </button>
+    <div className="site-header-bar">
+      <button className="brand" onClick={() => onNavigate('landing')} aria-label="SnapType home">
+        <LogoMark size={34} />
+        <Wordmark />
+      </button>
 
-    <nav className="site-nav" aria-label="Main">
-      <button className="btn btn-ghost btn-sm hide-sm" onClick={() => onNavigate('install')}
-        aria-current={currentView === 'install' ? 'page' : undefined}>
-        <Download size={15} aria-hidden="true" /> Install
-      </button>
-      <button className="btn btn-ghost btn-sm hide-sm" onClick={() => onNavigate('test-ground')}
-        aria-current={currentView === 'test-ground' ? 'page' : undefined}>
-        Test playground
-      </button>
-      {isAuthenticated ? (
-        <>
-          <button className="btn btn-secondary btn-sm" onClick={() => onNavigate('dashboard')}>
-            <LayoutDashboard size={15} aria-hidden="true" /> Dashboard
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sign out</button>
-        </>
-      ) : (
-        <button className="btn btn-primary btn-sm" onClick={onOpenAuth}>
-          <LogIn size={15} aria-hidden="true" /> Sign in
+      <nav className="site-nav" aria-label="Main">
+        <button className="nav-link hide-sm" onClick={() => onNavigate('install')} aria-current={currentView === 'install' ? 'page' : undefined}>
+          Install
         </button>
-      )}
-    </nav>
+        <button className="nav-link hide-sm" onClick={() => onNavigate('test-ground')} aria-current={currentView === 'test-ground' ? 'page' : undefined}>
+          Playground
+        </button>
+        {isAuthenticated ? (
+          <>
+            <button className="nav-link hide-xs" onClick={onLogout}>Sign out</button>
+            <button className="pill pill-lime" onClick={() => onNavigate('dashboard')}>
+              <FontAwesomeIcon icon={faGrip} aria-hidden="true" /> Dashboard
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="pill pill-lime" onClick={onOpenAuth}>
+              <FontAwesomeIcon icon={faRightToBracket} aria-hidden="true" /> Sign in
+            </button>
+          </>
+        )}
+      </nav>
+    </div>
   </header>
 );

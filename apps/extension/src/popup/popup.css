@@ -1,10 +1,10 @@
 :root {
-  --bg: #fcfcfa;
+  --bg: #f4f5f7;
   --surface: #ffffff;
-  --surface-subtle: #f6f7f4;
+  --surface-subtle: #f1f2f4;
   --ink: #101110;
-  --secondary: #686b66;
-  --border: #e5e8e2;
+  --secondary: #565a63;
+  --border: #e3e5e9;
   --accent: #85f66a;
   --accent-ink: #10200d;
 }
@@ -236,3 +236,15 @@ body {
   color: #e53935;
 }
 
+
+/* Modern look aligned with the web app */
+body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: -0.005em; }
+.popup-header { height: 52px; margin: 8px 8px 0; border: 0; border-radius: 20px; box-shadow: 0 1px 2px rgba(19,20,18,.04), 0 6px 18px rgba(19,20,18,.06); }
+.logo { gap: 8px; font-size: 17px; letter-spacing: -0.045em; }
+.logo-img { display: block; border-radius: 7px; }
+.logo-text b { color: #1f7a10; }
+.popup-input { background: var(--surface-subtle) !important; border: 1px solid transparent !important; border-radius: 14px !important; }
+.popup-input:focus { background: var(--surface) !important; border-color: var(--ink) !important; outline: none; box-shadow: 0 0 0 3px rgba(133,246,106,.45); }
+.popup-btn { border-radius: 999px !important; font-weight: 650; }
+.popup-btn-primary { background: var(--accent) !important; color: var(--accent-ink) !important; border-color: transparent !important; }
+.footer-btn { border-radius: 999px !important; }

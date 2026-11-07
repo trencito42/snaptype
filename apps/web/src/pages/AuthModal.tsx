@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
-import { Mail, ArrowRight, CheckCircle2, RotateCw, X } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faArrowRight, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { LogoMark } from '../components/Logo.js';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -92,10 +94,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialEmail, onCl
       <div style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg)',
+        borderRadius: 32,
         width: '100%',
-        maxWidth: 420,
-        padding: '36px 32px',
+        maxWidth: 440,
+        padding: '40px 34px',
         position: 'relative',
         boxShadow: '0 20px 40px rgba(0, 0, 0, 0.08)'
       }}>
@@ -111,27 +113,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialEmail, onCl
             cursor: 'pointer',
             color: 'var(--text-secondary)'
           }}
+          aria-label="Close"
         >
-          <X size={18} />
+          <FontAwesomeIcon icon={faXmark} size="lg" aria-hidden="true" />
         </button>
 
         {step === 'email' ? (
           <div>
-            <div style={{
-              display: 'inline-block',
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              backgroundColor: 'var(--accent)',
-              textAlign: 'center',
-              lineHeight: '32px',
-              fontSize: 16,
-              fontWeight: 800,
-              color: 'var(--accent-ink)',
-              marginBottom: 16
-            }}>
-              ⚡
-            </div>
+            <div style={{ marginBottom: 18 }}><LogoMark size={48} /></div>
 
             <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.5, marginBottom: 6 }}>
               Welcome to SnapType
@@ -143,7 +132,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialEmail, onCl
             {error && (
               <div style={{
                 padding: '10px 14px',
-                borderRadius: 6,
+                borderRadius: 14,
                 backgroundColor: 'var(--danger-light)',
                 color: 'var(--danger)',
                 fontSize: 13,
@@ -155,11 +144,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialEmail, onCl
 
             <form onSubmit={handleRequestOTP}>
               <div style={{ marginBottom: 18 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                <label htmlFor="auth-email" style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
                   Email address
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
+                    id="auth-email"
                     type="email"
                     className="input"
                     placeholder="name@company.com"
@@ -174,10 +164,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialEmail, onCl
               <button
                 type="submit"
                 className="btn btn-primary"
-                style={{ width: '100%', padding: '10px 0' }}
+                style={{ width: '100%', padding: '14px 0', fontSize: 16 }}
                 disabled={loading}
               >
-                {loading ? 'Sending code...' : 'Continue'} <ArrowRight size={16} />
+                {loading ? 'Sending code...' : 'Continue'} <FontAwesomeIcon icon={faArrowRight} aria-hidden="true" />
               </button>
             </form>
           </div>
@@ -194,7 +184,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialEmail, onCl
             {error && (
               <div style={{
                 padding: '10px 14px',
-                borderRadius: 6,
+                borderRadius: 14,
                 backgroundColor: 'var(--danger-light)',
                 color: 'var(--danger)',
                 fontSize: 13,
