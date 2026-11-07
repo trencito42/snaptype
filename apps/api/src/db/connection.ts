@@ -32,7 +32,7 @@ export function getDatabaseStatus() {
 
 export async function initDatabase(databaseUrl?: string, forceDriver?: string): Promise<IRepository> {
   const isProduction = process.env.NODE_ENV === 'production';
-  const driver = forceDriver || process.env.DB_DRIVER || (databaseUrl ? 'mysql' : (isProduction ? 'mysql' : 'memory'));
+  const driver = forceDriver || process.env.DB_DRIVER || ((databaseUrl || process.env.DATABASE_URL) ? 'mysql' : (isProduction ? 'mysql' : 'memory'));
 
   if (driver === 'memory') {
     if (isProduction) {

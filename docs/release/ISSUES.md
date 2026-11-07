@@ -31,3 +31,4 @@ Priorities: P0 data/security, P1 functional, P2 polish. Status: OPEN / FIXED-UNV
 | RB-025 | P1 | FIXED (test) | Invitation email interpolated workspace/inviter names into HTML unescaped (markup/link injection in mail sent from the product's SMTP) | `email.service.ts` `escapeHtml` | `permissions-matrix.test.ts` |
 | RB-026 | P2 | FIXED | Unauthorized snippet create/update answered 400 instead of 403 | `snippet.routes.ts` | `api-smoke.mjs` |
 | RB-027 | P1 | OPEN | No MySQL-backed integration of the whole API in vitest; `scripts/ci/api-smoke.mjs` (35 checks) now runs against MySQL in CI but is only verified locally on the in-memory repository | `ci.yml` | CI green with the MySQL step |
+| RB-028 | P0 | FIXED (test) | `DATABASE_URL` set without `DB_DRIVER` silently started the in-memory repository (found by the MySQL smoke step); compose set `DB_DRIVER` explicitly so Docker was unaffected | `connection.ts` | `db-connection.test.ts`; CI smoke must now run on MySQL |

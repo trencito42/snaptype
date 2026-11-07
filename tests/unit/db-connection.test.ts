@@ -32,3 +32,18 @@ describe('P0.2 Database Connection Fail-Safe', () => {
   });
 });
 
+
+describe('driver selection from DATABASE_URL (RB-028)', () => {
+  it('does not silently fall back to memory when only DATABASE_URL is set', async () => {
+    const prevUrl = process.env.DATABASE_URL, prevDrv = process.env.DB_DRIVER, prevEnv = process.env.NODE_ENV;
+    process.env.DATABASE_URL = 'mysql://u:p@127.0.0.1:1/none'; delete process.env.DB_DRIVER; process.env.NODE_ENV = 'production';
+    try {
+      // Production + unreachable MySQL must be fatal, never an in-memory repository.
+      await expect(initDatabase()).rejects.toThrow(/MySQL|DB Fatal/);
+    } finally {
+      if (prevUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = prevUrl;
+      if (prevDrv !== undefined) process.env.DB_DRIVER = prevDrv;
+      process.env.NODE_ENV = prevEnv;
+    }
+  });
+});
