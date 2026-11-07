@@ -117,6 +117,14 @@ export async function tableRoutes(app: FastifyInstance, repo: IRepository, authS
       return reply.status(403).send({ error: 'Editor access required to create table' });
     }
 
+    const existing = await repo.findTables(workspaceId);
+    if (existing.some((t) => t.name.trim().toLowerCase() === parsed.data.name.trim().toLowerCase())) {
+      return reply.status(409).send({ error: `A table named "${parsed.data.name}" already exists in this workspace` });
+    }
+    if (parsed.data.columns.length > 30) {
+      return reply.status(400).send({ error: 'A table can have at most 30 columns' });
+    }
+
     const table = await repo.createTable(workspaceId, parsed.data);
     return reply.status(201).send({ table });
   });
@@ -139,6 +147,13 @@ export async function tableRoutes(app: FastifyInstance, repo: IRepository, authS
     const parsed = UpdateTableSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid update data', details: parsed.error.flatten() });
+    }
+
+    if (parsed.data.name !== undefined) {
+      const siblings = await repo.findTables(table.workspaceId);
+      if (siblings.some((t) => t.id !== id && t.name.trim().toLowerCase() === parsed.data.name!.trim().toLowerCase())) {
+        return reply.status(409).send({ error: `A table named "${parsed.data.name}" already exists in this workspace` });
+      }
     }
 
     const updated = await repo.updateTable(id, parsed.data);
@@ -206,6 +221,10 @@ export async function tableRoutes(app: FastifyInstance, repo: IRepository, authS
     const validated = validateRowData(table.columns, data);
     if (!validated.valid) {
       return reply.status(400).send({ error: validated.error });
+    }
+
+    if ((await repo.findTableRows(id)).length >= 10000) {
+      return reply.status(400).send({ error: 'A table can hold at most 10,000 rows' });
     }
 
     const row = await repo.createTableRow(id, validated.cleanData || data);

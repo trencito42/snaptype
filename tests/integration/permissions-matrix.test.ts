@@ -150,3 +150,69 @@ describe('Invitation email HTML escaping (RB-025)', () => {
     expect(out).toBe('&lt;a href=&quot;https://evil.test&quot;&gt;Click&lt;/a&gt; &amp; &quot;x&quot;');
   });
 });
+
+import { redactUrl } from '../../apps/api/src/log-redact.js';
+import { tableRoutes } from '../../apps/api/src/routes/table.routes.js';
+
+describe('Log hygiene and data table integrity (RB-031, RB-032)', () => {
+  it('redacts tokens and codes from URLs before logging', () => {
+    expect(redactUrl('/api/v1/invitations/details?token=abc123')).toBe('/api/v1/invitations/details?token=[redacted]');
+    expect(redactUrl('/api/v1/sync?workspaceId=w&lastRevision=3')).toBe('/api/v1/sync?workspaceId=w&lastRevision=3');
+    expect(redactUrl('/x?code=123456&a=1')).toBe('/x?code=[redacted]&a=1');
+    expect(redactUrl('/plain')).toBe('/plain');
+  });
+
+  it('rejects duplicate table names (case-insensitive) on create and rename, and allows distinct names', async () => {
+    const repo = new InMemoryRepository();
+    const auth = new AuthService(repo);
+    const u = await repo.createUser('t@x.test', 'T');
+    const ws = await repo.createWorkspace('W', 'w-tbl', u.id, true);
+    const tok = await auth.createSessionForUser(u.id);
+    const app = fastify();
+    await tableRoutes(app, repo, auth);
+    await app.ready();
+    const h = { authorization: `Bearer ${tok}` };
+    const cols = [{ id: 'c1', name: 'Email', key: 'email', type: 'text' }];
+    const make = (name: string) => app.inject({ method: 'POST', url: '/api/v1/tables', headers: h, payload: { workspaceId: ws.id, name, columns: cols } });
+    const a = await make('Customers');
+    expect(a.statusCode).toBe(201);
+    expect((await make('customers')).statusCode).toBe(409);
+    const b = await make('Pricing');
+    expect(b.statusCode).toBe(201);
+    const rename = await app.inject({ method: 'PATCH', url: `/api/v1/tables/${b.json().table.id}`, headers: h, payload: { name: 'CUSTOMERS' } });
+    expect(rename.statusCode).toBe(409);
+  });
+});
+
+import crypto from 'node:crypto';
+
+describe('Session lifecycle (RB-033)', () => {
+  it('rejects expired sessions, revokes on logout, and revokes all sessions of a user', async () => {
+    const repo = new InMemoryRepository();
+    const auth = new AuthService(repo);
+    const u = await repo.createUser('s@x.test', 'S');
+    const raw = crypto.randomBytes(32).toString('hex');
+    await repo.createSession(u.id, crypto.createHash('sha256').update(raw).digest('hex'), new Date(Date.now() - 1000));
+    expect(await auth.validateSessionToken(raw)).toBeNull();           // expired
+
+    const live = await auth.createSessionForUser(u.id);
+    expect((await auth.validateSessionToken(live))?.id).toBe(u.id);
+    await auth.revokeSession(live);
+    expect(await auth.validateSessionToken(live)).toBeNull();          // logout
+
+    const a = await auth.createSessionForUser(u.id);
+    const b = await auth.createSessionForUser(u.id);
+    await auth.revokeAllUserSessions(u.id);
+    expect(await auth.validateSessionToken(a)).toBeNull();
+    expect(await auth.validateSessionToken(b)).toBeNull();
+  });
+
+  it('stores only hashes of session tokens', async () => {
+    const repo = new InMemoryRepository();
+    const auth = new AuthService(repo);
+    const u = await repo.createUser('h@x.test', 'H');
+    const raw = await auth.createSessionForUser(u.id);
+    expect(await repo.findSessionByTokenHash(raw)).toBeNull();          // the raw token is not a stored key
+    expect(await repo.findSessionByTokenHash(crypto.createHash('sha256').update(raw).digest('hex'))).not.toBeNull();
+  });
+});

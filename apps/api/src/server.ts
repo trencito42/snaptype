@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import fastify, { FastifyInstance } from 'fastify';
+import fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { initDatabase, getDatabaseStatus, getRepository } from './db/connection.js';
@@ -14,19 +14,32 @@ import { syncRoutes } from './routes/sync.routes.js';
 import { transferRoutes } from './routes/transfer.routes.js';
 import { tableRoutes } from './routes/table.routes.js';
 import { emailService } from './services/email.service.js';
+import { redactUrl } from './log-redact.js';
 
 export async function createServer(): Promise<FastifyInstance> {
+  const logSerializers = {
+    // Never write invitation/session tokens or codes that travel in query strings into the logs.
+    req(request: FastifyRequest) {
+      return {
+        method: request.method,
+        url: redactUrl(request.url),
+        host: request.headers?.host,
+        remoteAddress: request.ip
+      };
+    }
+  };
   const app = fastify({
     // Behind the bundled nginx reverse proxy the client IP is in X-Forwarded-For; without this the
     // rate limiter and session metadata see only the proxy address. Opt-in via TRUST_PROXY=true.
     trustProxy: process.env.TRUST_PROXY === 'true',
     logger: process.env.NODE_ENV === 'development' ? {
       level: 'info',
+      serializers: logSerializers,
       transport: {
         target: 'pino-pretty',
         options: { colorize: true }
       }
-    } : { level: 'info' }
+    } : { level: 'info', serializers: logSerializers }
   });
 
   // CORS configuration (ST-027)
