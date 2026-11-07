@@ -15,7 +15,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, isAuthe
   <header className={`site-header${isAuthenticated && currentView === 'dashboard' ? ' site-header-app' : ''}`}>
     <div className="site-header-bar">
       <button className="brand" onClick={() => onNavigate('landing')} aria-label="SnapType home">
-        <LogoMark size={34} />
+        <LogoMark size={34} decorative />
         <Wordmark />
       </button>
 

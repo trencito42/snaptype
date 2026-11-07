@@ -57,3 +57,12 @@ NOT TESTED / NOT AUDITED: account deletion with shared workspaces, Data Table co
 ## CI evidence
 
 Run https://github.com/trencito42/snaptype/actions/runs/42420301897 (commit `0900288`) passed every step: typecheck, tests, API smoke on real MySQL (atomic invitation claim, tombstones, ownership transfer, export/import), builds, packaging, real-Chrome extension E2E, fresh Docker install, legacy-schema upgrade. Commits after it (dashboard header fix `bf8e77a`) have not been confirmed by CI yet.
+
+## Update (final pass)
+
+- Firefox: shared scenario passes in real Firefox in CI (Selenium + geckodriver); offline and context-menu-message checks are skipped for Firefox (printed as SKIP).
+- Dashboard: `scripts/e2e/dashboard-e2e.mjs` 40/40 in real Chrome against a throw-away backend (also in CI).
+- Chrome extension E2E: 41/41.
+- Lighthouse (local, after redesign): mobile 98/100/100/100, desktop 80/100/100/100.
+- Unit/integration: 198 tests.
+- Latest CI run confirmed green: run 42424137389 (commit `79c7b54`). Commits after it are listed in the final report with their own run.

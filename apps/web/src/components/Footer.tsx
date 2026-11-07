@@ -7,7 +7,7 @@ export const Footer: React.FC<{ onNavigate: (view: string) => void }> = ({ onNav
   <footer className="site-footer">
     <div className="site-footer-card">
       <div className="footer-brand">
-        <div className="footer-logo"><LogoMark size={36} /><Wordmark /></div>
+        <div className="footer-logo"><LogoMark size={36} decorative /><Wordmark /></div>
         <p>Text expansion for Chrome and Firefox.</p>
         <a className="footer-gh" href="https://github.com/trencito42/snaptype" rel="noopener noreferrer" aria-label="SnapType on GitHub">
           <FontAwesomeIcon icon={faGithub} /> GitHub
