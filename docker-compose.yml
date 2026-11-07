@@ -13,7 +13,7 @@ services:
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Error: MYSQL_PASSWORD must be configured in .env}"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./infrastructure/migrations:/docker-entrypoint-initdb.d:ro
+    # Schema is owned exclusively by the API versioned migration runner (apps/api/src/db/migrate.ts).
     # MySQL is strictly isolated to the internal network (not exposed to host or internet)
     networks:
       - snaptype_net
