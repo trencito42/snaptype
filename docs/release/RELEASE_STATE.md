@@ -1,20 +1,37 @@
 # SnapType Release State (checkpoint)
 
-**Verdict: NOT release-ready.** Only the CI/Docker upgrade-test defect (RB-001..003) has been addressed in this session; the rest of the release brief is outstanding. See ISSUES.md and TEST_MATRIX.md.
+**Verdict: NOT release-ready.** Large parts of the product are now verified, but open P1 items and external blockers remain (below). Evidence: `TEST_MATRIX.md`. Tracker: `ISSUES.md`.
 
-Base commit: `c9db21f`. Working branch: `main`.
+Base commit of this work: `c9db21f`. Work is committed directly to `main`; see `git log` for the latest SHA and the GitHub Actions page for the matching run.
 
-## Done in this checkpoint
-- Confirmed the previous CI "legacy upgrade" test was invalid (latest schema auto-initialised by the MySQL init mount; `\$` escapes broken in YAML).
-- Removed init mount; added a real legacy fixture and a standalone verification script; CI generates ephemeral secrets.
-- Local baseline: typecheck clean, 115/115 tests pass.
+## Verified so far
+- CI is meaningful: typecheck, tests, web/API/extension builds, packaging, fresh Docker install, **real legacy MySQL upgrade** (CI #19 green), and a **real-Chrome extension E2E** step (added after #19; confirm green on the next run).
+- Real Chrome 157 run of the actual extension: 27/27 checks (login via extension, sync, expansion in textarea/input/contenteditable, password field skipped, server edit propagates, dynamic form/cancel/submit, date command, 409 conflict, workspace isolation, invitation, revocation clears cache, logout clears storage).
+- Security/data fixes with regression tests: cross-workspace folder refs, invitation role escalation, admin limits, atomic invitation acceptance (code), OTP SMTP-failure lockout, auth rate limits, proxy IP handling, sync rollback/full-replace/stale responses, import/export fidelity.
+- Homepage rebuilt: Lighthouse mobile 100/100/100/100 (perf/a11y/best-practices/SEO), desktop 90/100/100/100 after the contrast fix; no overflow at 320-1440 px; real-engine demo.
+- Dashboard usable on phones (single-pane navigation, modals fit).
+- Docs cleaned: unverified reports removed; README/TESTING/PERFORMANCE rewritten honestly.
 
-## Next steps for the next agent (in order)
-1. Check GitHub Actions for the pushed commit; fix `scripts/ci/legacy-upgrade-test.sh` until the step is genuinely green (watch: legacy tables vs `0001`/`0002` `IF NOT EXISTS`; `docker compose run` exit-code logic).
-2. RB-004: real-MySQL tests (CI `mysql` service) for fresh install, legacy upgrade, interrupted-DDL retry; make `ensureColumnExists`/token-hash upgrade tracked and idempotent.
-3. RB-005: audit in this order: auth/OTP -> permissions matrix per endpoint -> snippet/folder lifecycle -> sync -> data tables -> import/export -> command grammar vs UI examples.
-4. RB-007: extension verification in real Chrome and Firefox (Playwright with `--load-extension`; Firefox via `web-ext`).
-5. RB-006: homepage review/rebuild, then RB-008 documentation cleanup, packaging, store metadata.
+## Open items (priority order)
+1. **Firefox runtime is NOT TESTED** (no Firefox here). Manifest/ID/permissions are checked by tests only. Needs `web-ext run` or a Firefox CI job. (RB-007)
+2. Real-MySQL coverage beyond the upgrade script: atomic invitation acceptance, interrupted-DDL retry, repository parity. (RB-004)
+3. Audit still pending: account deletion with shared workspaces, Data Table concurrency/scale, revision restore, session rotation, log hygiene, role-change endpoint. (RB-020)
+4. Extension bridge origin allow-list hard-codes `snaptype.app`; derive from configured URL. (RB-019)
+5. Dashboard polish: replace native `alert/confirm`; keyboard/a11y pass on dashboard. (RB-018)
+6. Homepage: canonical URL, sitemap, social image, approved logo (see blockers).
+7. Not measured: extension idle CPU/memory, keystroke latency in pages, startup time (see `PERFORMANCE.md`).
+8. Browser editor matrix (rich-text editors, React controlled inputs, iframes, shadow DOM) not tested; do not claim compatibility.
 
-## Owner-only blockers (not actionable by an agent)
-Production domain/URLs, SMTP credentials, Chrome Web Store / AMO accounts and submission, approved logo asset (none found yet - verify before use).
+## Owner-only blockers
+- Production domain/URLs (needed for canonical, sitemap, OG image, `SNAPTYPE_API_URL`/`SNAPTYPE_APP_URL` release builds, store listings).
+- SMTP credentials and `SMTP_FROM` domain.
+- Chrome Web Store / Mozilla Add-ons accounts and submission (not done by the agent); Mozilla data-collection declaration and store screenshots/description.
+- Approved SnapType logo (none in repo; the current mark is an original stand-in in `apps/web/src/components/Logo.tsx`).
+
+## How to resume
+```bash
+npm ci && npm run build:packages && npm run typecheck && npm test
+node scripts/e2e/chrome-extension-e2e.mjs            # needs Chrome; throw-away API, never touches real data
+bash scripts/ci/legacy-upgrade-test.sh               # needs Docker; DESTRUCTIVE to the compose stack volume
+```
+Note: branded Chrome ignores `--load-extension`; the E2E script loads the extension through CDP `Extensions.loadUnpacked`. Kill stale `tsx`/Chrome processes before re-running if a run was interrupted.
