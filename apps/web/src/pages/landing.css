@@ -18,6 +18,10 @@
 .wordmark { font-weight: 800; font-size: 22px; letter-spacing: -0.045em; }
 .wordmark b { font-weight: 800; color: var(--accent-deep); }
 .site-nav { display: flex; align-items: center; gap: 4px; }
+/* In the signed-in app the header spans the full width and drops marketing links */
+.site-header-app { padding: 8px 8px 0; }
+.site-header-app .site-header-bar { max-width: none; min-height: 60px; border-radius: 22px; }
+.site-header-app .hide-app { display: none; }
 .nav-link { background: none; border: 0; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); padding: 10px 14px; border-radius: var(--radius-pill); cursor: pointer; }
 .nav-link:hover, .nav-link[aria-current='page'] { background: var(--surface-subtle); }
 

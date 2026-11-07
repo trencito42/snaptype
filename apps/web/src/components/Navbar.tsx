@@ -12,7 +12,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, isAuthenticated, onOpenAuth, onLogout }) => (
-  <header className="site-header">
+  <header className={`site-header${isAuthenticated && currentView === 'dashboard' ? ' site-header-app' : ''}`}>
     <div className="site-header-bar">
       <button className="brand" onClick={() => onNavigate('landing')} aria-label="SnapType home">
         <LogoMark size={34} />
@@ -20,10 +20,10 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, isAuthe
       </button>
 
       <nav className="site-nav" aria-label="Main">
-        <button className="nav-link hide-sm" onClick={() => onNavigate('install')} aria-current={currentView === 'install' ? 'page' : undefined}>
+        <button className="nav-link hide-sm hide-app" onClick={() => onNavigate('install')} aria-current={currentView === 'install' ? 'page' : undefined}>
           Install
         </button>
-        <button className="nav-link hide-sm" onClick={() => onNavigate('test-ground')} aria-current={currentView === 'test-ground' ? 'page' : undefined}>
+        <button className="nav-link hide-sm hide-app" onClick={() => onNavigate('test-ground')} aria-current={currentView === 'test-ground' ? 'page' : undefined}>
           Playground
         </button>
         {isAuthenticated ? (

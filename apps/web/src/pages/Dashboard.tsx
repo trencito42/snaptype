@@ -534,7 +534,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const previewResult = renderSnippet(editPlainContent, { variables: previewVars });
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100dvh - 76px)', minHeight: 0, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: 'calc(100dvh - 68px)', minHeight: 0, overflow: 'hidden' }}>
       {/* PANE 1: Folders & Navigation */}
       <div style={{
         width: isMobile ? '100%' : 260,
