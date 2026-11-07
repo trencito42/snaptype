@@ -1,0 +1,61 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: snaptype-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secure_password_replace_in_prod
+      MYSQL_DATABASE: snaptype_db
+      MYSQL_USER: snaptype_user
+      MYSQL_PASSWORD: snaptype_secure_password_replace_in_prod
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./infrastructure/migrations/0001_initial_schema.sql:/docker-entrypoint-initdb.d/0001_initial_schema.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secure_password_replace_in_prod"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: snaptype-api
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: mysql://snaptype_user:snaptype_secure_password_replace_in_prod@mysql:3306/snaptype_db
+      DB_DRIVER: mysql
+      JWT_SECRET: production_super_secure_random_key_with_at_least_32_characters_here
+      OTP_HMAC_SECRET: production_super_secure_hmac_secret_with_at_least_32_characters_here
+      APP_URL: http://localhost:8080
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-SnapType <auth@example.com>}
+    ports:
+      - "3000:3000"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: snaptype-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  mysql_data:

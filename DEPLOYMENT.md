@@ -1,6 +1,24 @@
 # SnapType — Production Deployment Guide
 
-This guide covers deploying the SnapType platform to a standard Linux VPS (Ubuntu 22.04 / 24.04 LTS), behind Nginx or a CloudPanel-style reverse proxy with HTTPS, Node.js 22+, and MySQL 8.0+.
+This guide covers deploying the SnapType platform to a standard Linux VPS (Ubuntu 22.04 / 24.04 LTS), or spinning it up instantly via Docker Compose.
+
+---
+
+## 0. Quick Start: Turnkey Docker Compose
+
+The fastest way to run SnapType self-hosted with MySQL 8.4, the API server, and the Web Dashboard:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/trencito42/snaptype.git
+cd snaptype
+
+# 2. Start all services (MySQL 8.4, Fastify API, Nginx Web Dashboard)
+docker compose up -d --build
+
+# 3. Access Web Dashboard
+# Open http://localhost:8080 in your browser
+```
 
 ---
 
