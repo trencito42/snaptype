@@ -10,6 +10,16 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: snaptype_db
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=5s --health-retries=10
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -51,6 +61,15 @@ jobs:
 
       - name: Validate Docker Compose Configuration (ST-005)
         run: docker compose --env-file .env.docker.example config
+
+      - name: Test Real Docker Deployment & Healthcheck (Release Blocker 8)
+        run: |
+          cp .env.docker.example .env
+          docker compose up -d --build
+          sleep 20
+          docker compose ps
+          curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://127.0.0.1:3000/health || (docker compose logs && exit 1)
+          docker compose down -v
 
       - name: Upload Extension Artifacts
         uses: actions/upload-artifact@v4

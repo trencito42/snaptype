@@ -4,18 +4,25 @@ import { Mail, ArrowRight, CheckCircle2, RotateCw, X } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
+  initialEmail?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialEmail, onClose, onSuccess }) => {
   const [step, setStep] = useState<'email' | 'otp'>('email');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail || '');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (initialEmail) {
+      setEmail(initialEmail);
+    }
+  }, [initialEmail]);
 
   useEffect(() => {
     let timer: any;

@@ -120,6 +120,17 @@ export class ContentEngine {
     document.addEventListener('keydown', (e) => this.handleKeyDown(e), true);
     document.addEventListener('input', (e) => this.handleInput(e), true);
 
+    // Dashboard workspace synchronization bridge (ST-037 / Blocker 2)
+    window.addEventListener('message', (event) => {
+      if (event.source !== window) return;
+      if (event.data?.type === 'SNAPTYPE_DASHBOARD_WORKSPACE_CHANGE' && event.data.workspaceId) {
+        BrowserApi.sendMessage({
+          action: 'SELECT_WORKSPACE',
+          workspaceId: event.data.workspaceId
+        }).catch(() => {});
+      }
+    });
+
     // Runtime messages from background (e.g. open assistant hotkey or popup insert)
     if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
       chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: any) => {

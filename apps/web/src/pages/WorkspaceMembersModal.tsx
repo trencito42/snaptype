@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
-import { X, UserPlus, Trash2, Shield, User as UserIcon } from 'lucide-react';
+import { X, UserPlus, Trash2, Shield, User as UserIcon, Mail, Copy, Check, Clock } from 'lucide-react';
 
 interface WorkspaceMembersModalProps {
   isOpen: boolean;
@@ -18,26 +18,39 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
   onClose
 }) => {
   const [members, setMembers] = useState<any[]>([]);
+  const [invitations, setInvitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<'admin' | 'editor' | 'viewer'>('editor');
   const [error, setError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const canManage = currentUserRole === 'owner' || currentUserRole === 'admin';
 
   useEffect(() => {
     if (isOpen && workspaceId) {
-      loadMembers();
+      setLastInviteLink(null);
+      loadData();
     }
   }, [isOpen, workspaceId]);
 
-  const loadMembers = async () => {
+  const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.getWorkspaceMembers(workspaceId);
-      setMembers(res.members || []);
+      const promises: [Promise<any>, Promise<any>?] = [api.getWorkspaceMembers(workspaceId)];
+      if (canManage) {
+        promises.push(api.getWorkspaceInvitations(workspaceId));
+      }
+      const [membersRes, invitesRes] = await Promise.all(promises);
+      setMembers(membersRes.members || []);
+      if (invitesRes) {
+        setInvitations(invitesRes.invitations || []);
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to load members');
+      setError(err.message || 'Failed to load workspace members and invitations');
     } finally {
       setLoading(false);
     }
@@ -50,11 +63,14 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
     setInviting(true);
     setError(null);
     try {
-      await api.addWorkspaceMember(workspaceId, newEmail.trim(), newRole);
+      const res = await api.addWorkspaceMember(workspaceId, newEmail.trim(), newRole);
+      if (res.inviteLink) {
+        setLastInviteLink(res.inviteLink);
+      }
       setNewEmail('');
-      await loadMembers();
+      await loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to add member');
+      setError(err.message || 'Failed to issue invitation');
     } finally {
       setInviting(false);
     }
@@ -65,15 +81,31 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
 
     try {
       await api.removeWorkspaceMember(workspaceId, userId);
-      await loadMembers();
+      await loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to remove member');
     }
   };
 
-  if (!isOpen) return null;
+  const handleRevokeInvitation = async (invitationId: string) => {
+    if (!confirm('Are you sure you want to revoke this pending invitation?')) return;
 
-  const canManage = currentUserRole === 'owner' || currentUserRole === 'admin';
+    try {
+      await api.revokeWorkspaceInvitation(workspaceId, invitationId);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to revoke invitation');
+    }
+  };
+
+  const handleCopyInviteLink = () => {
+    if (!lastInviteLink) return;
+    navigator.clipboard.writeText(lastInviteLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  if (!isOpen) return null;
 
   return (
     <div style={{
@@ -89,7 +121,7 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
-        width: 540,
+        width: 580,
         maxHeight: '85vh',
         overflowY: 'auto',
         padding: 24,
@@ -104,13 +136,13 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
 
         <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Workspace Members</h3>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-          Manage access and roles for <strong>{workspaceName}</strong>.
+          Manage access, roles, and pending invitations for <strong>{workspaceName}</strong>.
         </p>
 
         {canManage && (
-          <form onSubmit={handleAddMember} style={{ marginBottom: 24, padding: 14, background: 'var(--surface-subtle)', borderRadius: 8 }}>
+          <form onSubmit={handleAddMember} style={{ marginBottom: 20, padding: 14, background: 'var(--surface-subtle)', borderRadius: 8 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
-              Invite or Add Teammate
+              Invite Teammate via Email
             </label>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
@@ -133,10 +165,41 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
                 <option value="viewer">Viewer</option>
               </select>
               <button type="submit" className="btn btn-primary btn-sm" disabled={inviting}>
-                <UserPlus size={14} /> Add
+                <UserPlus size={14} /> Invite
               </button>
             </div>
           </form>
+        )}
+
+        {lastInviteLink && (
+          <div style={{
+            marginBottom: 20,
+            padding: 12,
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: 8
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', marginBottom: 6 }}>
+              Invitation sent! You can also share this direct invite link:
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                readOnly
+                className="input"
+                style={{ flex: 1, fontSize: 12, background: '#fff' }}
+                value={lastInviteLink}
+              />
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ background: '#166534', color: '#fff', border: 'none' }}
+                onClick={handleCopyInviteLink}
+              >
+                {copiedLink ? <Check size={14} /> : <Copy size={14} />} {copiedLink ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
         )}
 
         {error && (
@@ -145,53 +208,109 @@ export const WorkspaceMembersModal: React.FC<WorkspaceMembersModalProps> = ({
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>
-              Loading members...
-            </div>
-          ) : (
-            members.map(member => (
-              <div
-                key={member.userId}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 16,
-                    background: 'var(--surface-subtle)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    <UserIcon size={16} color="var(--text-secondary)" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{member.userId}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-                      Role: {member.role}
+        {/* Active Members */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>
+            Active Members ({members.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {loading && members.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-secondary)', fontSize: 13 }}>
+                Loading members...
+              </div>
+            ) : (
+              members.map(member => (
+                <div
+                  key={member.userId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 16,
+                      background: 'var(--surface-subtle)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <UserIcon size={16} color="var(--text-secondary)" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{member.userId}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                        Role: {member.role}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {canManage && member.role !== 'owner' && (
-                  <button
-                    onClick={() => handleRemoveMember(member.userId)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 6 }}
-                    title="Remove member"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
-            ))
-          )}
+                  {canManage && member.role !== 'owner' && (
+                    <button
+                      onClick={() => handleRemoveMember(member.userId)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 6 }}
+                      title="Remove member"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
         </div>
+
+        {/* Pending Invitations */}
+        {canManage && invitations.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>
+              Pending Invitations ({invitations.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {invitations.map((inv) => (
+                <div
+                  key={inv.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    border: '1px dashed var(--border)',
+                    borderRadius: 6,
+                    background: 'var(--surface-subtle)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 16,
+                      background: 'var(--surface)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <Mail size={15} color="var(--text-secondary)" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{inv.email}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                        Role: <span style={{ textTransform: 'capitalize' }}>{inv.role}</span> &bull; Expires: {new Date(inv.expiresAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleRevokeInvitation(inv.id)}
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--danger)', fontSize: 12 }}
+                    title="Revoke invitation"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
           <button className="btn btn-secondary btn-sm" onClick={onClose}>

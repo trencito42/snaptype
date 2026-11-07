@@ -47,3 +47,4 @@ describe('Blocker 4: Extension Build & Packaging Origins', () => {
     expect(verifyManifestPermissions(['https://api.snaptype.app/*'], true)).toBe(true);
   });
 });
+

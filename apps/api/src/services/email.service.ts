@@ -107,6 +107,95 @@ SnapType - Production-ready text expansion platform.
       return true;
     }
   }
+
+  public async sendWorkspaceInvitation(
+    email: string,
+    workspaceName: string,
+    inviterName: string,
+    inviteUrl: string,
+    role: string
+  ): Promise<boolean> {
+    const from = process.env.SMTP_FROM || 'SnapType <noreply@snaptype.app>';
+    const subject = `${inviterName} invited you to join ${workspaceName} on SnapType`;
+
+    const textContent = `You have been invited to join the ${workspaceName} workspace on SnapType as ${role}.
+
+Invited by: ${inviterName}
+
+To accept this invitation and access shared team snippets, click the secure link below:
+${inviteUrl}
+
+This link is valid for 7 days. If you do not wish to join, you can safely ignore this email.
+
+---
+SnapType - Production-ready text expansion platform.
+`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #fcfcfa; color: #101110; padding: 40px 20px; margin: 0; }
+    .container { max-width: 480px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e8e2; border-radius: 12px; padding: 36px 32px; }
+    .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: #101110; margin-bottom: 24px; display: inline-block; }
+    .accent { color: #10200d; background: #85f66a; padding: 2px 8px; border-radius: 6px; }
+    .title { font-size: 22px; font-weight: 700; line-height: 1.25; margin: 0 0 12px 0; }
+    .desc { font-size: 15px; color: #686b66; line-height: 1.5; margin: 0 0 24px 0; }
+    .btn { display: inline-block; background-color: #101110; color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; text-align: center; }
+    .footer { font-size: 12px; color: #686b66; border-top: 1px solid #e5e8e2; padding-top: 20px; margin-top: 28px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">Snap<span class="accent">Type</span></div>
+    <h1 class="title">You're invited to collaborate</h1>
+    <p class="desc"><strong>${inviterName}</strong> has invited you to join the <strong>${workspaceName}</strong> workspace as an <strong>${role}</strong>.</p>
+    <div style="text-align: center; margin: 28px 0;">
+      <a href="${inviteUrl}" class="btn">Accept Invitation</a>
+    </div>
+    <p class="desc" style="font-size: 13px;">Or copy and paste this URL into your browser:<br><span style="word-break: break-all; color: #2563eb;">${inviteUrl}</span></p>
+    <div class="footer">
+      SnapType Platform &bull; High-performance text expansion &bull; Reliability and speed first
+    </div>
+  </div>
+</body>
+</html>
+`;
+
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (this.isConfigured && this.transporter) {
+      try {
+        await this.transporter.sendMail({
+          from,
+          to: email,
+          subject,
+          text: textContent,
+          html: htmlContent
+        });
+        return true;
+      } catch (err: any) {
+        console.error(`[Email Error] Failed to send workspace invitation to ${email}: ${err.message}`);
+        if (!isProduction) {
+          console.log(`[Email Dev Fallback] Invitation link for ${email}: ${inviteUrl}`);
+        }
+        return false;
+      }
+    } else {
+      if (isProduction) {
+        console.error(`[Email Error] SMTP is not configured in production environment.`);
+        return false;
+      }
+      console.log(`\n============================================================`);
+      console.log(`[SnapType Invite (Dev)] Workspace Invitation for: ${email}`);
+      console.log(`>>> WORKSPACE: ${workspaceName} (${role}) by ${inviterName}`);
+      console.log(`>>> INVITE LINK: ${inviteUrl}`);
+      console.log(`============================================================\n`);
+      return true;
+    }
+  }
 }
 
 export const emailService = new EmailService();

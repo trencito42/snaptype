@@ -27,3 +27,4 @@ describe('ST-005 & Release Blocker: Docker Compose Configuration Validation', ()
     expect(envContent).toContain('JWT_SECRET=');
   });
 });
+

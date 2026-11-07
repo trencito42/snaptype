@@ -211,13 +211,13 @@ class ApiClient {
     });
   }
 
-  // Workspace Members
+  // Workspace Members & Invitations
   public async getWorkspaceMembers(workspaceId: string) {
     return this.request<{ members: any[] }>(`/workspaces/${workspaceId}/members`);
   }
 
   public async addWorkspaceMember(workspaceId: string, email: string, role: string = 'editor') {
-    return this.request<{ member: any }>(`/workspaces/${workspaceId}/members`, {
+    return this.request<{ invitation: any; inviteLink?: string; message: string }>(`/workspaces/${workspaceId}/members`, {
       method: 'POST',
       body: JSON.stringify({ email, role })
     });
@@ -226,6 +226,44 @@ class ApiClient {
   public async removeWorkspaceMember(workspaceId: string, userId: string) {
     return this.request<{ success: boolean }>(`/workspaces/${workspaceId}/members/${userId}`, {
       method: 'DELETE'
+    });
+  }
+
+  public async getWorkspaceInvitations(workspaceId: string) {
+    return this.request<{ invitations: any[] }>(`/workspaces/${workspaceId}/invitations`);
+  }
+
+  public async revokeWorkspaceInvitation(workspaceId: string, invitationId: string) {
+    return this.request<{ success: boolean; message: string }>(`/workspaces/${workspaceId}/invitations/${invitationId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  public async getInvitationDetails(token: string) {
+    return this.request<{
+      invitation: {
+        id: string;
+        workspaceId: string;
+        workspaceName: string;
+        inviterName: string;
+        email: string;
+        role: string;
+        expiresAt: string;
+      };
+    }>(`/invitations/details?token=${encodeURIComponent(token)}`);
+  }
+
+  public async acceptInvitation(token: string) {
+    return this.request<{ success: boolean; member: any }>('/invitations/accept', {
+      method: 'POST',
+      body: JSON.stringify({ token })
+    });
+  }
+
+  public async rejectInvitation(token: string) {
+    return this.request<{ success: boolean; message: string }>('/invitations/reject', {
+      method: 'POST',
+      body: JSON.stringify({ token })
     });
   }
 

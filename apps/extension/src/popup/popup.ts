@@ -1,6 +1,6 @@
 import { BrowserApi } from '@snaptype/browser-compat';
 import { Snippet } from '@snaptype/shared';
-import { renderSnippet } from '@snaptype/snippet-engine';
+import { renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
 
 declare const __SNAPTYPE_APP_URL__: string;
 const APP_URL = typeof __SNAPTYPE_APP_URL__ !== 'undefined' ? __SNAPTYPE_APP_URL__ : 'http://localhost:5173';
@@ -13,6 +13,7 @@ const otpForm = document.getElementById('otp-form') as HTMLFormElement;
 const authEmail = document.getElementById('auth-email') as HTMLInputElement;
 const authOtp = document.getElementById('auth-otp') as HTMLInputElement;
 const authError = document.getElementById('auth-error')!;
+const workspaceSelect = document.getElementById('workspace-select') as HTMLSelectElement;
 const snippetSearch = document.getElementById('snippet-search') as HTMLInputElement;
 const snippetList = document.getElementById('snippet-list')!;
 const headerStatus = document.getElementById('header-status')!;
@@ -47,6 +48,46 @@ function showMainView(data: any) {
   mainView.style.display = 'flex';
   currentSnippets = data.snippets || [];
   headerStatus.textContent = `${currentSnippets.length} snippets`;
+
+  // Populate workspace dropdown
+  if (workspaceSelect) {
+    workspaceSelect.innerHTML = '';
+    const workspaces = data.workspaces || [];
+    if (workspaces.length > 0) {
+      for (const ws of workspaces) {
+        const opt = document.createElement('option');
+        opt.value = ws.id;
+        opt.textContent = ws.name;
+        if (ws.id === data.currentWorkspaceId) {
+          opt.selected = true;
+        }
+        workspaceSelect.appendChild(opt);
+      }
+    } else {
+      const opt = document.createElement('option');
+      opt.value = data.currentWorkspaceId || '';
+      opt.textContent = 'Default Workspace';
+      workspaceSelect.appendChild(opt);
+    }
+
+    workspaceSelect.onchange = async () => {
+      const targetWsId = workspaceSelect.value;
+      headerStatus.textContent = 'Switching...';
+      const res = await BrowserApi.sendMessage({
+        action: 'SELECT_WORKSPACE',
+        workspaceId: targetWsId
+      });
+      if (res && res.success) {
+        const fresh = await BrowserApi.sendMessage({ action: 'GET_DATA' });
+        currentSnippets = fresh?.snippets || [];
+        headerStatus.textContent = `${currentSnippets.length} snippets`;
+        renderSnippetList(currentSnippets);
+      } else {
+        headerStatus.textContent = 'Switch failed';
+      }
+    };
+  }
+
   renderSnippetList(currentSnippets);
 }
 
@@ -144,7 +185,28 @@ function renderSnippetList(snippets: Snippet[]) {
     copyBtn.onclick = async (e) => {
       e.stopPropagation();
       try {
-        const rendered = renderSnippet(s.plainContent);
+        const fields = extractFormFields(s.plainContent);
+        const unfilled = fields.filter((f) => !f.defaultValue && f.required !== false);
+        if (unfilled.length > 0) {
+          copyBtn.textContent = 'Fill in tab';
+          setTimeout(() => (copyBtn.textContent = 'Copy'), 1400);
+          return;
+        }
+
+        const defaults: Record<string, any> = {};
+        for (const f of fields) {
+          if (f.defaultValue !== undefined) {
+            defaults[f.name] = f.defaultValue;
+          }
+        }
+
+        const rendered = renderSnippet(s.plainContent, { variables: defaults });
+        if (rendered.errors && rendered.errors.length > 0) {
+          copyBtn.textContent = 'Syntax error';
+          setTimeout(() => (copyBtn.textContent = 'Copy'), 1400);
+          return;
+        }
+
         await navigator.clipboard.writeText(rendered.text);
         copyBtn.textContent = 'Copied!';
         setTimeout(() => (copyBtn.textContent = 'Copy'), 1000);

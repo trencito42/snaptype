@@ -44,5 +44,45 @@ describe('ST-008 & ST-045: Versioned Migrations Runner', () => {
 
     spyCreate.mockRestore();
   });
+
+  it('Release Blocker 1: safely upgrades legacy workspace_invitations token to token_hash without losing active invitations', async () => {
+    const executedQueries: string[] = [];
+
+    const mockConnection = {
+      query: vi.fn(async (sql: string, params?: any[]) => {
+        executedQueries.push(sql);
+        if (sql.includes('SELECT id FROM schema_migrations')) {
+          return [[{ id: '0001_initial_schema.sql' }, { id: '0002_schema_upgrade.sql' }]];
+        }
+        if (sql.includes('FROM information_schema.TABLES')) {
+          return [[{ 1: 1 }]];
+        }
+        if (sql.includes('SELECT COLUMN_NAME FROM information_schema.COLUMNS')) {
+          // Simulate legacy table that still has 'token' but not 'token_hash'
+          return [[{ COLUMN_NAME: 'id' }, { COLUMN_NAME: 'email' }, { COLUMN_NAME: 'token' }]];
+        }
+        if (sql.includes('FROM information_schema.STATISTICS')) {
+          return [[{ INDEX_NAME: 'idx_invitation_token' }]];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+      end: vi.fn(async () => {})
+    };
+
+    const spyCreate = vi.spyOn(mysql, 'createConnection').mockResolvedValue(mockConnection as any);
+
+    await runMigrations('mysql://user:pass@localhost:3306/test_db');
+
+    // Verify token_hash column added
+    expect(executedQueries.some(q => q.includes('ADD COLUMN `token_hash`'))).toBe(true);
+    // Verify existing tokens hashed via SHA2(token, 256)
+    expect(executedQueries.some(q => q.includes('SET `token_hash` = SHA2(`token`, 256)'))).toBe(true);
+    // Verify token_hash modified to NOT NULL
+    expect(executedQueries.some(q => q.includes('MODIFY COLUMN `token_hash` VARCHAR(128) NOT NULL'))).toBe(true);
+    // Verify plaintext token column dropped
+    expect(executedQueries.some(q => q.includes('DROP COLUMN `token`'))).toBe(true);
+
+    spyCreate.mockRestore();
+  });
 });
 

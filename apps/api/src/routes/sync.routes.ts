@@ -13,7 +13,7 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
     reply.header('Pragma', 'no-cache');
 
     const user = request.user!;
-    const query = request.query as { lastRevision?: string; workspaceId?: string };
+    const query = request.query as { lastRevision?: string; workspaceId?: string; includeTables?: string };
     const lastRevision = parseInt(query.lastRevision || '0', 10);
 
     let workspaceId = query.workspaceId;
@@ -41,11 +41,21 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
 
     const syncData = await repo.getSyncData(workspaceId, lastRevision);
     const preferences = await repo.getUserPreferences(user.id);
-    const rawTables = await repo.findTables(workspaceId);
-    const tables = [];
-    for (const t of rawTables) {
-      const rows = await repo.findTableRows(t.id);
-      tables.push({ ...t, rows });
+
+    // ST-042 / Blocker 5: Lazy/incremental data tables sync
+    // Avoid sending every table and every row on every periodic sync.
+    // Full table payload is only included if:
+    // 1) Initial sync / workspace switch (lastRevision === 0)
+    // 2) Client explicitly requested table refresh (query.includeTables === 'true')
+    // 3) Snippet/workspace revision has advanced (syncData.currentRevision > lastRevision)
+    let tables: any[] | undefined = undefined;
+    if (lastRevision === 0 || query.includeTables === 'true' || syncData.currentRevision > lastRevision) {
+      const rawTables = await repo.findTables(workspaceId);
+      tables = [];
+      for (const t of rawTables) {
+        const rows = await repo.findTableRows(t.id);
+        tables.push({ ...t, rows });
+      }
     }
 
     const response: SyncResponse = {
@@ -55,7 +65,7 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
       folders: syncData.folders,
       deletedFolderIds: syncData.deletedFolderIds,
       preferences,
-      tables
+      ...(tables !== undefined ? { tables } : {})
     };
 
     return response;

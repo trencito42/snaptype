@@ -95,6 +95,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const isInitialLoad = React.useRef(true);
   const snippetLoadedRef = React.useRef<string | null>(null);
   const isDirty = React.useRef(false);
+  const isSavingRef = React.useRef(false);
+  const pendingSaveRef = React.useRef(false);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   useEffect(() => {
     if (isInitialLoad.current) {
@@ -153,7 +166,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const selectSnippet = (snippet: Snippet) => {
+  const selectSnippet = async (snippet: Snippet) => {
+    if (selectedSnippetId && selectedSnippetId !== snippet.id && isDirty.current) {
+      await handleSaveSnippet();
+    }
     isDirty.current = false;
     snippetLoadedRef.current = snippet.id;
     setSelectedSnippetId(snippet.id);
@@ -175,6 +191,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
       defaults[f.name] = f.defaultValue || '';
     }
     setPreviewVars(defaults);
+  };
+
+  const changeActiveWorkspace = async (newWsId: string) => {
+    if (isDirty.current && selectedSnippetId) {
+      await handleSaveSnippet();
+    }
+    setActiveWorkspaceId(newWsId);
+    setSelectedSnippetId(null);
+    setSelectedFolderId('all');
+
+    // Broadcast to extension content script (ST-037 / Blocker 2)
+    if (typeof window !== 'undefined') {
+      window.postMessage({
+        type: 'SNAPTYPE_DASHBOARD_WORKSPACE_CHANGE',
+        workspaceId: newWsId
+      }, '*');
+    }
+
+    await refreshData(newWsId);
   };
 
   const handleCreateSnippet = async () => {
@@ -205,14 +240,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleSaveSnippet = async () => {
+  const handleSaveSnippet = async (forceOverwrite = false) => {
     if (!selectedSnippetId) return;
 
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+
+    isSavingRef.current = true;
     setSaveStatus('saving');
     setErrorMessage(null);
 
     const current = snippets.find((s) => s.id === selectedSnippetId);
-    if (!current) return;
+    if (!current) {
+      isSavingRef.current = false;
+      return;
+    }
 
     const tagsArray = editTags
       .split(',')
@@ -229,7 +273,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         tags: tagsArray,
         isFavorite: editIsFavorite,
         isEnabled: editIsEnabled,
-        expectedVersion: current.version
+        expectedVersion: forceOverwrite ? undefined : current.version
       });
 
       setSaveStatus('saved');
@@ -239,10 +283,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
     } catch (err: any) {
       if (err.status === 409) {
         setSaveStatus('conflict');
-        setErrorMessage('Conflict: Modified on another device. Please refresh.');
+        setErrorMessage('Conflict: Modified on another device or tab.');
       } else {
         setSaveStatus('error');
         setErrorMessage(err.message || 'Failed to save');
+      }
+    } finally {
+      isSavingRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        handleSaveSnippet();
       }
     }
   };
@@ -314,9 +364,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     try {
       const res = await api.createWorkspace({ name: newWorkspaceName.trim() });
       setWorkspaces([...workspaces, { workspace: res.workspace, role: 'owner' }]);
-      setActiveWorkspaceId(res.workspace.id);
-      setSelectedSnippetId(null);
-      setSelectedFolderId('all');
+      await changeActiveWorkspace(res.workspace.id);
       setNewWorkspaceName('');
       setShowNewWorkspaceModal(false);
       await refreshData(res.workspace.id);
@@ -425,10 +473,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               value={activeWorkspaceId}
               onChange={async (e) => {
                 const newWsId = e.target.value;
-                setActiveWorkspaceId(newWsId);
-                setSelectedSnippetId(null);
-                setSelectedFolderId('all');
-                await refreshData(newWsId);
+                await changeActiveWorkspace(newWsId);
               }}
             >
               {workspaces.map((w) => (
@@ -697,16 +742,52 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <button className="btn btn-danger btn-sm" onClick={handleDeleteSnippet} title="Delete">
                   <Trash2 size={15} /> Delete
                 </button>
-                <button className="btn btn-primary btn-sm" onClick={handleSaveSnippet}>
+                <button className="btn btn-primary btn-sm" onClick={() => handleSaveSnippet()}>
                   Save changes
                 </button>
               </div>
             </div>
 
-            {/* Error banner if save error */}
+            {/* Error or Conflict banner */}
             {errorMessage && (
-              <div style={{ padding: '8px 24px', backgroundColor: 'var(--danger-light)', color: 'var(--danger)', fontSize: 13 }}>
-                {errorMessage}
+              <div style={{
+                padding: '10px 24px',
+                backgroundColor: saveStatus === 'conflict' ? '#fff7ed' : 'var(--danger-light)',
+                borderBottom: '1px solid ' + (saveStatus === 'conflict' ? '#fdba74' : 'var(--border)'),
+                color: saveStatus === 'conflict' ? '#9a3412' : 'var(--danger)',
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertCircle size={16} />
+                  <span>{errorMessage}</span>
+                </div>
+                {saveStatus === 'conflict' && (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn btn-sm"
+                      style={{ fontSize: 12, padding: '3px 10px', background: '#ea580c', color: '#fff', border: 'none' }}
+                      onClick={() => handleSaveSnippet(true)}
+                    >
+                      Overwrite
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: 12, padding: '3px 10px' }}
+                      onClick={async () => {
+                        if (selectedSnippetId) {
+                          const res = await api.getSnippet(selectedSnippetId);
+                          selectSnippet(res.snippet);
+                        }
+                      }}
+                    >
+                      Reload Server Version
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

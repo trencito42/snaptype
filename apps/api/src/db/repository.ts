@@ -165,6 +165,11 @@ export class InMemoryRepository implements IRepository {
     for (const [sId, sess] of this.sessions.entries()) {
       if (sess.userId === id) this.sessions.delete(sId);
     }
+    // Simulate MySQL ON DELETE CASCADE for workspace members & preferences
+    for (const [mId, m] of this.workspaceMembers.entries()) {
+      if (m.userId === id) this.workspaceMembers.delete(mId);
+    }
+    this.preferences.delete(id);
   }
 
   async createEmailChallenge(email: string, hashedCode: string, expiresAt: Date): Promise<VerificationChallengeRecord> {

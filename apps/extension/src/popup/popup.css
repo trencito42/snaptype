@@ -99,6 +99,37 @@ body {
   border-color: var(--ink);
 }
 
+.workspace-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.workspace-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.popup-select {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+  cursor: pointer;
+}
+
+.popup-select:focus {
+  border-color: var(--ink);
+}
+
 .popup-input-mono {
   font-family: monospace;
   font-size: 20px;

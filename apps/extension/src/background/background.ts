@@ -12,6 +12,7 @@ const PERIODIC_SYNC_ALARM = 'snaptype-periodic-sync';
 interface BackgroundState {
   token: string | null;
   currentWorkspaceId: string | null;
+  workspaces: Array<{ id: string; name: string }>;
   snippets: Snippet[];
   tables: DataTable[];
   preferences: UserPreferences;
@@ -22,6 +23,7 @@ interface BackgroundState {
 const state: BackgroundState = {
   token: null,
   currentWorkspaceId: null,
+  workspaces: [],
   snippets: [],
   tables: [],
   preferences: { ...DEFAULT_PREFERENCES },
@@ -36,6 +38,7 @@ async function init() {
   if (stored && stored.snaptype_token) {
     state.token = stored.snaptype_token;
     state.currentWorkspaceId = stored.snaptype_workspace || null;
+    await fetchWorkspaces();
     await syncWithServer();
   }
 
@@ -106,10 +109,39 @@ if (typeof chrome !== 'undefined' && chrome.contextMenus) {
   });
 }
 
+async function fetchWorkspaces(): Promise<void> {
+  if (!state.token) return;
+  try {
+    const res = await fetch(`${API_BASE}/workspaces`, {
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+        'Cache-Control': 'no-store'
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.workspaces)) {
+        state.workspaces = data.workspaces.map((w: any) => ({
+          id: w.workspace.id,
+          name: w.workspace.name
+        }));
+        if (!state.currentWorkspaceId && state.workspaces.length > 0) {
+          state.currentWorkspaceId = state.workspaces[0].id;
+        }
+      }
+    }
+  } catch (err) {
+    console.debug('[SnapType Background] fetchWorkspaces failed:', err);
+  }
+}
+
 async function syncWithServer(): Promise<boolean> {
   if (!state.token) return false;
 
   try {
+    if (state.workspaces.length === 0) {
+      await fetchWorkspaces();
+    }
     const params = new URLSearchParams();
     params.set('lastRevision', String(state.currentRevision));
     if (state.currentWorkspaceId) {
@@ -155,7 +187,7 @@ async function syncWithServer(): Promise<boolean> {
       updateContextMenu(data.preferences.assistantShortcut);
     }
     state.lastSyncTime = Date.now();
-    if (data.tables) {
+    if (data.tables !== undefined) {
       state.tables = data.tables;
     }
 
@@ -214,6 +246,7 @@ function notifyTabsDataUpdated() {
 async function handleLogout() {
   state.token = null;
   state.currentWorkspaceId = null;
+  state.workspaces = [];
   state.snippets = [];
   state.tables = [];
   state.currentRevision = 0;
@@ -236,12 +269,16 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
       case 'GET_DATA':
       case 'GET_SNIPPETS': {
         // If memory is empty but we have token, rehydrate
+        if (state.token && state.workspaces.length === 0) {
+          await fetchWorkspaces();
+        }
         if (state.token && state.snippets.length === 0) {
           await syncWithServer();
         }
         return {
           isAuthenticated: Boolean(state.token),
           currentWorkspaceId: state.currentWorkspaceId,
+          workspaces: state.workspaces,
           snippets: state.snippets,
           tables: state.tables,
           preferences: state.preferences,
@@ -331,8 +368,9 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
           const authStore = BrowserApi.getAuthStorage();
           await authStore.set({ snaptype_token: data.token });
 
+          await fetchWorkspaces();
           await syncWithServer();
-          return { success: true, user: data.user };
+          return { success: true, user: data.user, workspaces: state.workspaces };
         } catch (err: any) {
           return { success: false, error: err.message };
         }

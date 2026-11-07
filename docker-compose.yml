@@ -13,7 +13,7 @@ services:
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Error: MYSQL_PASSWORD must be configured in .env}"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./infrastructure/migrations/0001_initial_schema.sql:/docker-entrypoint-initdb.d/0001_initial_schema.sql:ro
+      - ./infrastructure/migrations:/docker-entrypoint-initdb.d:ro
     # MySQL is strictly isolated to the internal network (not exposed to host or internet)
     networks:
       - snaptype_net

@@ -187,5 +187,69 @@ describe('ST-007: Real Workspace Invitation Lifecycle & Token Verification', () 
     const nowRevoked = await repo.findInvitationByToken(inv.token);
     expect(nowRevoked?.revokedAt).not.toBeNull();
   });
+
+  it('provides invite link in creation response and serves details via /invitations/details', async () => {
+    const inviteeEmail = 'details.test@company.com';
+    const inviteRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceId}/members`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { email: inviteeEmail, role: 'viewer' }
+    });
+
+    expect(inviteRes.statusCode).toBe(201);
+    const body = JSON.parse(inviteRes.body);
+    expect(body.inviteLink).toBeDefined();
+    expect(body.inviteLink).toContain('/invite?token=');
+
+    const token = body.invitation.token;
+
+    // Unauthenticated user inspects invitation details
+    const detailsRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/invitations/details?token=${token}`
+    });
+
+    expect(detailsRes.statusCode).toBe(200);
+    const detailsBody = JSON.parse(detailsRes.body);
+    expect(detailsBody.invitation).toBeDefined();
+    expect(detailsBody.invitation.email).toBe(inviteeEmail);
+    expect(detailsBody.invitation.role).toBe('viewer');
+    expect(detailsBody.invitation.workspaceName).toBe('Engineering');
+    expect(detailsBody.invitation.inviterName).toBe('Org Owner');
+  });
+
+  it('allows recipient to decline an invitation via /invitations/reject', async () => {
+    const inviteeEmail = 'decline.test@company.com';
+    const inviteRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceId}/members`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { email: inviteeEmail, role: 'editor' }
+    });
+
+    const token = JSON.parse(inviteRes.body).invitation.token;
+
+    // Recipient declines invitation
+    const rejectRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/invitations/reject',
+      payload: { token }
+    });
+
+    expect(rejectRes.statusCode).toBe(200);
+    expect(JSON.parse(rejectRes.body).success).toBe(true);
+
+    // Stored invitation is marked revoked
+    const stored = await repo.findInvitationByToken(token);
+    expect(stored?.revokedAt).not.toBeNull();
+
+    // Details endpoint returns 410 Gone for revoked invitation
+    const detailsRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/invitations/details?token=${token}`
+    });
+    expect(detailsRes.statusCode).toBe(410);
+  });
 });
 

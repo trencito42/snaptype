@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { InMemoryRepository } from '../../apps/api/src/db/repository.js';
 import { AuthService } from '../../apps/api/src/services/auth.service.js';
 import { renderSnippet } from '../../packages/snippet-engine/src/dynamic-parser.js';
+import fastify, { FastifyInstance } from 'fastify';
+import { syncRoutes } from '../../apps/api/src/routes/sync.routes.js';
 
 describe('Data Tables and Lookup Resolution', () => {
   let repo: InMemoryRepository;
@@ -99,5 +101,56 @@ describe('Data Tables and Lookup Resolution', () => {
     await repo.deleteTable(tableId);
     const tablesAfter = await repo.findTables(workspaceId);
     expect(tablesAfter).toHaveLength(0);
+  });
+
+  it('performs incremental/lazy table synchronization (ST-042 / Blocker 5)', async () => {
+    const app: FastifyInstance = fastify();
+    await syncRoutes(app, repo, authService);
+    await app.ready();
+
+    const user = await repo.createUser('sync.tester@company.com', 'Sync User');
+    const ws = await repo.createWorkspace('Sync Workspace', 'sync-ws', user.id, true);
+    const userToken = await authService.createSessionForUser(user.id);
+
+    // Create a table with rows
+    const tbl = await repo.createTable(ws.id, {
+      name: 'products',
+      columns: [{ id: '1', name: 'SKU', key: 'sku', type: 'text' }]
+    });
+    await repo.createTableRow(tbl.id, { sku: 'PROD-100' });
+
+    // 1. Initial sync (lastRevision === 0) includes tables with rows
+    const initialRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sync?workspaceId=${ws.id}&lastRevision=0`,
+      headers: { authorization: `Bearer ${userToken}` }
+    });
+    expect(initialRes.statusCode).toBe(200);
+    const initialBody = JSON.parse(initialRes.body);
+    expect(initialBody.tables).toBeDefined();
+    expect(initialBody.tables).toHaveLength(1);
+    expect(initialBody.tables[0].rows).toHaveLength(1);
+
+    // 2. Incremental sync with same revision does NOT transmit tables (saving bandwidth on low-end machines)
+    const currentRev = initialBody.currentRevision;
+    const lazyRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sync?workspaceId=${ws.id}&lastRevision=${currentRev}`,
+      headers: { authorization: `Bearer ${userToken}` }
+    });
+    expect(lazyRes.statusCode).toBe(200);
+    const lazyBody = JSON.parse(lazyRes.body);
+    expect(lazyBody.tables).toBeUndefined();
+
+    // 3. Explicit table refresh request (includeTables=true) returns tables even if revision unchanged
+    const forcedRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sync?workspaceId=${ws.id}&lastRevision=${currentRev}&includeTables=true`,
+      headers: { authorization: `Bearer ${userToken}` }
+    });
+    expect(forcedRes.statusCode).toBe(200);
+    const forcedBody = JSON.parse(forcedRes.body);
+    expect(forcedBody.tables).toBeDefined();
+    expect(forcedBody.tables).toHaveLength(1);
   });
 });

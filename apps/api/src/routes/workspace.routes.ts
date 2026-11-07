@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { IRepository } from '../db/repository.js';
 import { AuthService } from '../services/auth.service.js';
 import { createAuthMiddleware } from '../middleware/auth.middleware.js';
+import { emailService } from '../services/email.service.js';
 import { WorkspaceRole } from '@snaptype/shared';
 import crypto from 'node:crypto';
 
@@ -97,8 +98,21 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
     const expiresAt = new Date(Date.now() + INVITATION_DURATION_MS);
     const invitation = await repo.createWorkspaceInvitation(id, targetEmail, assignedRole, user.id, token, expiresAt);
 
+    const appUrl = process.env.SNAPTYPE_APP_URL || process.env.APP_URL || 'http://localhost:5173';
+    const inviteLink = `${appUrl}/invite?token=${token}`;
+    const inviterName = user.name || user.email;
+    const workspace = await repo.findWorkspaceById(id);
+    const workspaceName = workspace?.name || 'SnapType Workspace';
+
+    try {
+      await emailService.sendWorkspaceInvitation(targetEmail, workspaceName, inviterName, inviteLink, assignedRole);
+    } catch (emailErr) {
+      console.error('[SnapType] Failed to send invitation email:', emailErr);
+    }
+
     return reply.status(201).send({
       invitation,
+      inviteLink,
       message: `Invitation issued for ${targetEmail}. Pending acceptance.`
     });
   });
@@ -169,5 +183,58 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
     } catch (err: any) {
       return reply.status(400).send({ error: err.message });
     }
+  });
+
+  // Inspect invitation details (ST-007 / Blocker 3)
+  app.get('/api/v1/invitations/details', async (request, reply) => {
+    const query = request.query as { token?: string };
+    if (!query?.token?.trim()) {
+      return reply.status(400).send({ error: 'Invitation token is required' });
+    }
+
+    const inv = await repo.findInvitationByToken(query.token.trim());
+    if (!inv) {
+      return reply.status(404).send({ error: 'Invitation not found' });
+    }
+    if (inv.revokedAt) {
+      return reply.status(410).send({ error: 'Invitation has been revoked' });
+    }
+    if (inv.acceptedAt) {
+      return reply.status(410).send({ error: 'Invitation has already been accepted' });
+    }
+    if (new Date(inv.expiresAt) < new Date()) {
+      return reply.status(410).send({ error: 'Invitation has expired' });
+    }
+
+    const ws = await repo.findWorkspaceById(inv.workspaceId);
+    const inviter = await repo.findUserById(inv.invitedById);
+
+    return {
+      invitation: {
+        id: inv.id,
+        workspaceId: inv.workspaceId,
+        workspaceName: ws?.name || 'SnapType Workspace',
+        inviterName: inviter?.name || inviter?.email || 'A team member',
+        email: inv.email,
+        role: inv.role,
+        expiresAt: inv.expiresAt
+      }
+    };
+  });
+
+  // Reject / decline workspace invitation
+  app.post('/api/v1/invitations/reject', async (request, reply) => {
+    const body = request.body as { token?: string };
+    if (!body?.token?.trim()) {
+      return reply.status(400).send({ error: 'Invitation token is required' });
+    }
+
+    const inv = await repo.findInvitationByToken(body.token.trim());
+    if (!inv) {
+      return reply.status(404).send({ error: 'Invitation not found' });
+    }
+
+    await repo.revokeWorkspaceInvitation(inv.workspaceId, inv.id);
+    return { success: true, message: 'Invitation declined' };
   });
 }
