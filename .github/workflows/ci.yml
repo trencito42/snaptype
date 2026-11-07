@@ -54,7 +54,16 @@ jobs:
       - name: Package Extension Archives
         run: npm run package:extensions
 
-      - name: Build & Package Production Release Extensions (No Loopback Permissions)
+      - name: Keep development extension archives as CI artifacts
+        run: |
+          mkdir -p artifacts
+          cp dist/chrome-extension.zip artifacts/chrome-extension-dev.zip
+          cp dist/firefox-extension.zip artifacts/firefox-extension-dev.zip
+
+      - name: Validate production extension build (placeholder .test URLs - NOT a releasable package)
+        env:
+          SNAPTYPE_API_URL: https://api.example.test/api/v1
+          SNAPTYPE_APP_URL: https://app.example.test
         run: |
           npm run build:extension:prod
           npm run package:extensions:prod
@@ -84,8 +93,9 @@ jobs:
       - name: Surface container logs on failure
         if: failure()
         run: |
-          for svc in mysql api; do
-            LOG=$(docker compose logs --no-color --tail 40 "$svc" 2>&1 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          for svc in api mysql; do
+            N=40; [ "$svc" = mysql ] && N=6
+            LOG=$(docker compose logs --no-color --tail "$N" "$svc" 2>&1 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=docker logs $svc::$LOG"
           done
 
@@ -94,6 +104,6 @@ jobs:
         with:
           name: snaptype-extensions
           path: |
-            dist/chrome-extension.zip
-            dist/firefox-extension.zip
+            artifacts/chrome-extension-dev.zip
+            artifacts/firefox-extension-dev.zip
           retention-days: 14

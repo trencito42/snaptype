@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const EXT_SRC = path.resolve(__dirname, 'src');
-const ROOT_DIST = path.resolve(__dirname, '../../dist');
+const outDirArg = process.argv.slice(2).find((a) => a.startsWith('--out-dir='));
+const ROOT_DIST = outDirArg ? path.resolve(outDirArg.split('=')[1]) : path.resolve(__dirname, '../../dist');
+const EXT_VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf-8')).version;
 
 const args = process.argv.slice(2);
 const isProduction = args.includes('--production') || process.env.NODE_ENV === 'production';
@@ -21,10 +23,17 @@ let API_URL = (apiUrlArg ? apiUrlArg.split('=')[1] : null) || process.env.SNAPTY
 let APP_URL = (appUrlArg ? appUrlArg.split('=')[1] : null) || process.env.SNAPTYPE_APP_URL;
 
 if (isProduction) {
-  if (!API_URL) API_URL = 'https://api.snaptype.app/api/v1';
-  if (!APP_URL) APP_URL = 'https://snaptype.app';
-  if (API_URL.includes('localhost') || API_URL.includes('127.0.0.1')) {
-    throw new Error(`Production extension release cannot use loopback or localhost address: ${API_URL}`);
+  // No invented defaults: a production package must point at infrastructure the owner configured.
+  if (!API_URL || !APP_URL) {
+    throw new Error('Production build requires SNAPTYPE_API_URL (e.g. https://host/api/v1) and SNAPTYPE_APP_URL (e.g. https://host).');
+  }
+  for (const [label, value] of [['API', API_URL], ['App', APP_URL]]) {
+    let u;
+    try { u = new URL(value); } catch { throw new Error(`Production ${label} URL is not a valid URL: ${value}`); }
+    if (u.protocol !== 'https:') throw new Error(`Production ${label} URL must use https: ${value}`);
+    if (['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)) {
+      throw new Error(`Production extension release cannot use loopback or localhost address: ${value}`);
+    }
   }
 } else {
   if (!API_URL) API_URL = 'http://localhost:3000/api/v1';
@@ -86,8 +95,10 @@ async function buildTarget(target) {
   const manifestRaw = fs.readFileSync(manifestFile, 'utf-8');
   const manifest = JSON.parse(manifestRaw);
 
+  manifest.version = EXT_VERSION; // single source of truth: apps/extension/package.json
+  manifest.host_permissions = manifest.host_permissions || [];
   if (isProduction) {
-    manifest.host_permissions = (manifest.host_permissions || []).filter(
+    manifest.host_permissions = manifest.host_permissions.filter(
       (h) => !h.includes('localhost') && !h.includes('127.0.0.1')
     );
   }
@@ -99,8 +110,8 @@ async function buildTarget(target) {
     if (!manifest.host_permissions.includes(hostPattern)) {
       manifest.host_permissions.push(hostPattern);
     }
-  } catch {
-    // Keep default host permissions if URL parsing fails
+  } catch (err) {
+    throw new Error(`Cannot derive host permission from API URL ${API_URL}: ${err.message}`);
   }
 
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));

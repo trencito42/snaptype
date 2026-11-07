@@ -37,6 +37,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOST: 0.0.0.0
+      TRUST_PROXY: "${TRUST_PROXY:-true}"
       DATABASE_URL: "mysql://${MYSQL_USER:-snaptype_user}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-snaptype_db}"
       DB_DRIVER: mysql
       JWT_SECRET: "${JWT_SECRET:?Error: JWT_SECRET must be configured in .env and at least 32 characters}"

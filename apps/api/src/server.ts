@@ -17,6 +17,9 @@ import { emailService } from './services/email.service.js';
 
 export async function createServer(): Promise<FastifyInstance> {
   const app = fastify({
+    // Behind the bundled nginx reverse proxy the client IP is in X-Forwarded-For; without this the
+    // rate limiter and session metadata see only the proxy address. Opt-in via TRUST_PROXY=true.
+    trustProxy: process.env.TRUST_PROXY === 'true',
     logger: process.env.NODE_ENV === 'development' ? {
       level: 'info',
       transport: {

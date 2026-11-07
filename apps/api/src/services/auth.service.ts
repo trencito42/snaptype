@@ -58,6 +58,12 @@ export class AuthService {
     // Send email (no OTP logged here)
     const sent = await emailService.sendVerificationCode(normalizedEmail, code);
     if (!sent) {
+      // Void the undelivered challenge so the user is not locked out by the resend cooldown
+      // for a code they never received.
+      const undelivered = await this.repo.findLatestChallenge(normalizedEmail);
+      if (undelivered && !undelivered.verifiedAt) {
+        await this.repo.markChallengeVerified(undelivered.id);
+      }
       return {
         success: false,
         message: 'Unable to deliver verification email. Please check your email address or SMTP configuration.'

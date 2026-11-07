@@ -49,11 +49,22 @@ export class SnippetService {
     return snippet;
   }
 
+  /** A snippet may only live in a live folder of its own workspace. */
+  private async assertFolderInWorkspace(workspaceId: string, folderId: string | null | undefined): Promise<void> {
+    if (!folderId) return;
+    const folder = await this.repo.findFolderById(folderId);
+    if (!folder || folder.workspaceId !== workspaceId) {
+      throw new Error('Folder not found in this workspace');
+    }
+  }
+
   public async createSnippet(workspaceId: string, userId: string, input: CreateSnippetInput): Promise<Snippet> {
     const hasAccess = await this.verifyWorkspaceAccess(workspaceId, userId, 'editor');
     if (!hasAccess) {
       throw new Error('Unauthorized workspace access (requires editor or higher)');
     }
+
+    await this.assertFolderInWorkspace(workspaceId, input.folderId);
 
     // Check duplicate shortcut within workspace
     const existing = await this.repo.findSnippetByShortcut(workspaceId, input.shortcut);
@@ -71,6 +82,8 @@ export class SnippetService {
 
     const hasAccess = await this.verifyWorkspaceAccess(snippet.workspaceId, userId, 'editor');
     if (!hasAccess) throw new Error('Unauthorized workspace access');
+
+    await this.assertFolderInWorkspace(snippet.workspaceId, input.folderId);
 
     // Optimistic concurrency check
     if (input.expectedVersion !== undefined && input.expectedVersion !== snippet.version) {

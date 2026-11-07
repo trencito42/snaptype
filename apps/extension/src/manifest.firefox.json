@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SnapType — Text Expansion Platform",
   "version": "1.0.0",
-  "description": "Sub-millisecond local text expansion for high-performance customer support and productivity.",
+  "description": "Expand short shortcuts into saved snippets in web text fields, synced from your SnapType account.",
   "browser_specific_settings": {
     "gecko": {
       "id": "extension@snaptype.app",
@@ -17,17 +17,24 @@
   ],
   "host_permissions": [
     "http://localhost:3000/*",
-    "http://127.0.0.1:3000/*",
-    "https://api.snaptype.app/*"
+    "http://127.0.0.1:3000/*"
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -41,4 +48,3 @@
     "128": "icons/icon128.png"
   }
 }
-

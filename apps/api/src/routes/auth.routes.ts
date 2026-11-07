@@ -5,7 +5,7 @@ import { emailService } from '../services/email.service.js';
 
 export async function authRoutes(app: FastifyInstance, authService: AuthService) {
   // Request OTP
-  app.post('/api/v1/auth/request-otp', async (request, reply) => {
+  app.post('/api/v1/auth/request-otp', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     const parseResult = RequestOTPSchema.safeParse(request.body);
     if (!parseResult.success) {
       return reply.status(400).send({
@@ -32,7 +32,7 @@ export async function authRoutes(app: FastifyInstance, authService: AuthService)
   });
 
   // Verify OTP
-  app.post('/api/v1/auth/verify-otp', async (request, reply) => {
+  app.post('/api/v1/auth/verify-otp', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
     const parseResult = VerifyOTPSchema.safeParse(request.body);
     if (!parseResult.success) {
       return reply.status(400).send({
