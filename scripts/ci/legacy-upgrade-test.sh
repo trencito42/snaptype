@@ -6,7 +6,19 @@ cd "$(dirname "$0")/../.."
 set -a; . ./.env; set +a
 
 mysql_q() { docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" snaptype-mysql mysql -uroot -N -s "$MYSQL_DATABASE" "$@"; }
-cleanup() { docker compose down -v >/dev/null 2>&1 || true; }
+exec > >(tee /tmp/legacy.log) 2>&1
+annotate() { # $1 title, $2 text -> GitHub annotation (newlines encoded)
+  printf '::error title=%s::%s
+' "$1" "$(printf '%s' "$2" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+}
+cleanup() {
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    annotate "legacy-upgrade script output" "$(tail -25 /tmp/legacy.log 2>/dev/null)"
+    annotate "legacy-upgrade api logs" "$(docker compose logs --no-color --tail 40 api 2>&1)"
+  fi
+  docker compose down -v >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 docker compose down -v >/dev/null 2>&1 || true
