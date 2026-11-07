@@ -1,124 +1,58 @@
-# SnapType — Production-Ready Text Expansion Platform
+# SnapType
 
-SnapType is a high-performance, self-hosted text expansion platform inspired functionally by Text Blaze, engineered with original product identity, editorial minimalism (JoyPixels-inspired visual direction), and extreme performance for low-end hardware.
+Text expansion for the browser: type a short code in any web text field and SnapType replaces it with a saved snippet. Snippets live in your account, are organised in folders, can be shared in workspaces, and can contain dynamic fields.
 
----
+> Release status and verification evidence: [`docs/release/RELEASE_STATE.md`](docs/release/RELEASE_STATE.md). Known issues: [`docs/release/ISSUES.md`](docs/release/ISSUES.md).
 
-## ⚡ Core Highlights
+## What is in this repository
 
-- **Sub-Millisecond Keystroke Matching**: Pure in-memory reverse-trie lookup (average ~1.5 µs latency across 5,000 snippets).
-- **Zero Keystroke Transmission**: Keystrokes never leave the browser. Zero network calls on typing.
-- **Authoritative Database & Ephemeral Client Memory**: Authoritative snippet data resides in MySQL. Browsers keep in-memory matching structures in temporary tab/session memory without persisting sensitive customer responses to browser disk.
-- **Low Hardware Footprint**: Idle content-script CPU usage is 0.0%. No continuous DOM polling or layout recalculation.
-- **Manifest V3 Extensions**: Production builds for both Chromium (Chrome, Edge, Brave) and Mozilla Firefox.
-- **Dynamic Syntax & Safe AST Parser**:
-  - Date & time formatting with relative calculations (`+1d`, `-2w`, `+1m`, timezones).
-  - Caret placement with `{{cursor}}`.
-  - Fill-in interactive forms (`{{input:...}}`, `{{paragraph:...}}`, `{{dropdown:...}}`, `{{toggle:...}}`).
-  - Safe arithmetic formulas (`{{formula: price * qty}}`) without `eval()` or `Function()`.
-  - Conditionals (`{{#if isApproved}}...{{else}}...{{/if}}`) and repetitions (`{{#repeat 3}}...{{/repeat}}`).
-  - Modular snippet composition (`{{snippet:shortcut}}`) with recursion safeguards.
-- **Clean Passwordless Auth**: Unified email OTP authentication with cryptographically secure single-use codes, cooldown rate limiting, and session rotation.
+| Path | Purpose |
+|------|---------|
+| `apps/api` | Fastify + TypeScript API, MySQL (Drizzle) with versioned SQL migrations, email-OTP auth, sync |
+| `apps/web` | React + Vite homepage and dashboard |
+| `apps/extension` | Manifest V3 extension for Chrome/Chromium and Firefox (esbuild) |
+| `packages/shared` | Types and Zod schemas |
+| `packages/snippet-engine` | Shortcut matcher, dynamic command renderer, formulas, dates |
+| `packages/browser-compat` | Cross-browser helpers |
+| `infrastructure/migrations` | Ordered MySQL migrations applied by the API at startup |
+| `docs/release` | Release state, issue tracker, test matrix, performance notes |
 
----
+## Features (what the code implements)
 
-## 📁 Repository Structure
+- Email one-time-code sign-in; sessions stored hashed server-side.
+- Snippets with folders, tags, favourites, per-site restrictions, revisions, optimistic-concurrency saves with conflict handling.
+- Workspaces with owner / admin / editor / viewer roles and email invitations.
+- Data Tables usable from snippets; JSON/CSV import and export.
+- Dynamic commands: dates, cursor, clipboard, selection, fill-in forms (text, paragraph, dropdown, toggle, date), conditions, repeats, formulas, snippet inclusion, table lookups, site context, notes. The in-app Command Browser examples are checked against the parser by `tests/unit/command-browser-parity.test.ts`.
+- Chrome and Firefox extensions that sync the selected workspace and expand shortcuts in inputs, textareas and contenteditable fields.
 
-```text
-snaptype/
-├── apps/
-│   ├── api/            # Fastify backend, MySQL / Drizzle ORM, OTP auth, sync API
-│   ├── web/            # React + Vite web dashboard & JoyPixels-inspired marketing site
-│   └── extension/      # Manifest V3 extension (Chrome & Firefox vanilla TS)
-│
-├── packages/
-│   ├── shared/         # Domain models, Zod validation schemas, DTOs
-│   ├── snippet-engine/ # Reverse-trie index, date formatter, AST formula evaluator
-│   └── browser-compat/ # Cross-browser polyfill & input/contenteditable DOM inserters
-│
-├── infrastructure/
-│   ├── migrations/     # MySQL 8.0+ idempotent migration SQL
-│   └── deployment/     # PM2 & Nginx reverse proxy configurations
-│
-├── tests/
-│   ├── unit/           # Trie matching, formula evaluator, parser, dates, benchmarks
-│   └── integration/    # Auth, sessions, snippet CRUD, revisions, workspace isolation
-│
-├── dist/
-│   ├── chrome/         # Unpacked Chrome MV3 extension
-│   ├── firefox/        # Unpacked Firefox MV3 extension
-│   ├── chrome-extension.zip
-│   └── firefox-extension.zip
-│
-├── DEPLOYMENT.md       # Linux VPS / CloudPanel production setup guide
-├── TESTING.md          # Test suite documentation & benchmark reports
-└── AGENT_PROGRESS.md   # Durable checkpoint and implementation milestones
-```
+What is **not** claimed: universal editor compatibility, measured idle CPU/memory in real browsers, or store availability. See the test matrix for what has actually been verified.
 
----
-
-## 🚀 Quickstart Guide
-
-### 1. Prerequisites
-- Node.js 22+ (tested on Node v24.19.0)
-- npm 10+
-- (Optional) MySQL 8.0+ (the system includes an automated in-memory adapter for immediate zero-config local testing!)
-
-### 2. Install & Build
+## Development
 
 ```bash
-# Install dependencies across all workspaces
-npm install
-
-# Build shared packages
+npm ci
 npm run build:packages
-
-# Run full test suite (33 unit & integration tests)
+npm run typecheck
 npm test
-
-# Build all applications and browser extensions
-npm run build
-npm run package:extensions
+npm run dev:api     # API on :3000 (in-memory repository when DATABASE_URL is unset; development only)
+npm run dev:web     # web on :5173, proxies /api to :3000
+npm run build:extension   # unpacked builds in dist/chrome and dist/firefox (development API URL)
 ```
 
-### 3. Start Development Services
+In development the OTP code is printed to the API console. Production never logs codes and refuses to start without MySQL, applied migrations and valid secrets.
+
+## Production
+
+See [`DEPLOYMENT.md`](DEPLOYMENT.md). Copy `.env.docker.example` to `.env`, generate secrets (`openssl rand -hex 32`), then `docker compose up -d --build`. MySQL is not exposed outside the compose network; the API is bound to `127.0.0.1:3000`; the web container serves the dashboard and proxies `/api`. Terminate HTTPS at your reverse proxy.
+
+Release extension packages require explicit URLs (no defaults):
 
 ```bash
-# Terminal 1: Backend API (port 3000)
-npm run dev -w apps/api
-
-# Terminal 2: Web Dashboard & Marketing (port 5173)
-npm run dev -w apps/web
+SNAPTYPE_API_URL=https://your-host/api/v1 SNAPTYPE_APP_URL=https://your-host \
+  npm run build:extension:prod && npm run package:extensions:prod
 ```
 
-Open `http://localhost:5173` in your browser.
+## Testing
 
----
-
-## 🧩 Installing the Browser Extension
-
-### Chrome / Chromium:
-1. Open Chrome and navigate to `chrome://extensions/`.
-2. Toggle on **Developer mode** in the top-right corner.
-3. Click **Load unpacked** and select the `dist/chrome` folder in this repository.
-4. Click the SnapType extension icon in the browser toolbar to sign in via email OTP.
-
-### Firefox:
-1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on...**.
-3. Select `dist/firefox/manifest.json`.
-4. SnapType is active for your Firefox session.
-
----
-
-## ⌨️ Built-in Starter Shortcuts
-
-When a new account is registered, these default snippets are automatically ready:
-- `cerbonus` — Formal Romanian bonus request response
-- `msver` — Account verification confirmation notice
-- `/salut` — Personalized customer greeting with dynamic name form
-- `/closing` — Timestamped closing with dynamic date & time
-- `retragere` — Withdrawal processing timeline notice
-
-Press **Ctrl + Shift + Space** on any webpage to open the keyboard search assistant!
-
+`npm test` runs the Vitest suite (unit and in-memory API integration). CI additionally builds everything, runs a fresh Docker install and a real legacy-database upgrade on MySQL (`scripts/ci/legacy-upgrade-test.sh`). Browser-level extension testing is tracked in `docs/release/TEST_MATRIX.md`.
