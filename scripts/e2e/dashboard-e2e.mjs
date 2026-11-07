@@ -185,6 +185,37 @@ try {
   record('UI: settings switch persists to the server', (prefs.preferences?.caseSensitive ?? prefs.caseSensitive) === true, JSON.stringify(prefs).slice(0, 160));
   await ev(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Cancel' || b.textContent.trim() === 'Close')?.click(); 1`);
 
+  // 11b. Hotkey recorder captures real key presses instead of typed text; uniform control heights
+  await sleep(2000); // the previous save auto-closes the dialog after a short delay
+  await h(`__h.click('Preferences'); await new Promise(r => setTimeout(r, 500));`);
+  const key = (type, k, code, vk, modifiers) => send('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk, modifiers });
+  if (process.env.DEBUG_UI) console.log('DEBUG hotkey modal:', String(await ev('document.body.innerText')).split(String.fromCharCode(10)).join(' | ').slice(0, 500), '| has', await ev(`!!document.querySelector('.ui-hotkey')`));
+  await h(`document.querySelector('.ui-hotkey').click(); await new Promise(r => setTimeout(r, 200));`);
+  await key('keyDown', 't', 'KeyT', 84, 2); await key('keyUp', 't', 'KeyT', 84, 2); await sleep(200);
+  const reservedHint = await ev(`document.querySelector('.ui-hotkey-hint')?.innerText || ''`);
+  record('UI: recorder refuses browser-reserved combos (Ctrl+T) with an explanation', /used by the browser/.test(reservedHint), reservedHint);
+  await key('keyDown', 'k', 'KeyK', 75, 2 | 1); await key('keyUp', 'k', 'KeyK', 75, 2 | 1); await sleep(300);
+  const shown = await ev(`[...document.querySelectorAll('.ui-hotkey kbd')].map(k => k.textContent).join('+')`);
+  record('UI: pressing Ctrl+Alt+K records "Ctrl+Alt+K" (no text typing)', shown === 'Ctrl+Alt+K', shown);
+  const heights = await ev(`(() => { let m = document.querySelector('.ui-hotkey'); while (m && getComputedStyle(m).position !== 'fixed') m = m.parentElement; const els = [...m.querySelectorAll('input.input, .ui-select, .ui-hotkey')].filter(e => e.offsetParent); return els.map(e => Math.round(e.getBoundingClientRect().height)); })()`);
+  record('UI: all inputs, selects and the hotkey field share one height in the settings dialog', heights.length >= 3 && new Set(heights).size === 1, JSON.stringify(heights));
+  await h(`__h.click('Save Preferences'); await new Promise(r => setTimeout(r, 900));`);
+  const prefs2 = (await call(TOKEN, 'GET', '/preferences')).j;
+  record('UI: the recorded hotkey is saved to the server in the extension format', (prefs2.preferences?.assistantShortcut ?? prefs2.assistantShortcut) === 'Ctrl+Alt+K', JSON.stringify(prefs2).slice(0, 200));
+  await ev(`[...document.querySelectorAll('button[aria-label=Close]')].forEach(b => b.click()); 1`);
+
+  // 11c. Editor controls have a uniform height as well
+  await h(`__h.card('Cerere bonus'); await new Promise(r => setTimeout(r, 500));`);
+  const edHeights = await ev(`(() => { const els = [...document.querySelectorAll('input.input, .ui-select:not(.ui-select-sm)')].filter(e => e.offsetParent && !(e.placeholder || '').startsWith('Search')); return els.map(e => Math.round(e.getBoundingClientRect().height)); })()`);
+  record('UI: snippet name, shortcut, folder, tags and description fields share one height', edHeights.length >= 5 && new Set(edHeights).size === 1, JSON.stringify(edHeights));
+
+  // 11d. "Save selection as snippet" from the extension opens /?new=<text>
+  const nBefore = (await snippets()).length;
+  await send('Page.navigate', { url: `http://127.0.0.1:${WEB_PORT}/?new=${encodeURIComponent('Selected text from a web page')}` });
+  await sleep(3500);
+  const pre = (await snippets()).find((x) => x.plainContent === 'Selected text from a web page');
+  record('UI: opening /?new=<text> creates a snippet from the selected text and clears the parameter', Boolean(pre) && (await snippets()).length === nBefore + 1 && !(await ev('location.search')), JSON.stringify(pre)?.slice(0, 120));
+
   // 12. Team: invite and revoke
   await ev(`location.reload(); 1`); await sleep(2500);
   await h(`__h.click('Team Members'); await new Promise(r => setTimeout(r, 600));`);

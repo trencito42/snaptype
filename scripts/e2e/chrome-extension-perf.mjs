@@ -13,6 +13,8 @@ const CHROME = process.argv[2] || ['C:/Program Files/Google/Chrome/Application/c
 const API_PORT = 3300, PAGE_PORT = 8199, DBG = 9400 + Math.floor(Math.random() * 90);
 const API = `http://127.0.0.1:${API_PORT}/api/v1`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// fixed-width, letters-only shortcuts (no prefix collisions): zz + 4 letters
+const code4 = (n) => { let x = n, o = ''; for (let k = 0; k < 4; k++) { o = String.fromCharCode(97 + (x % 26)) + o; x = Math.floor(x / 26); } return 'zz' + o; };
 const procs = [];
 const kill = (p) => { try { if (process.platform === 'win32' && p.pid) spawnSync('taskkill', ['/pid', String(p.pid), '/T', '/F'], { stdio: 'ignore' }); else p.kill(); } catch {} };
 const cleanup = () => { procs.forEach(kill); try { fs.rmSync(path.join(ROOT, '.e2e-tmp'), { recursive: true, force: true }); } catch {} };
@@ -73,19 +75,20 @@ const rows = [];
 let total = 5; // starter snippets
 for (const target of [100, 1000, 5000]) {
   const batch = [];
-  for (let i = total; i < target; i++) batch.push({ name: `Snippet ${i}`, shortcut: `zz${String(i).padStart(5, '0')}`, plainContent: `Body of snippet number ${i}. `.repeat(8) + 'ăîșțâ' });
+  for (let i = total; i < target; i++) batch.push({ name: `Snippet ${i}`, shortcut: code4(i), plainContent: `Body of snippet number ${i}. `.repeat(8) + 'ăîșțâ' });
   for (let off = 0; off < batch.length; off += 500) await call(login.token, 'POST', '/import', { workspaceId: ws, snippets: batch.slice(off, off + 500), format: 'snaptype_json', conflictStrategy: 'duplicate' });
   total = target;
   const raw = await (await fetch(`${API}/sync?workspaceId=${ws}&lastRevision=0`, { headers: { authorization: `Bearer ${login.token}` } })).text();
   await msg({ action: 'SELECT_WORKSPACE', workspaceId: ws }); // forces a full resync with the new library
-  await sleep(1500);
+  await sleep(3500);
   const n = (await msg({ action: 'GET_STATUS' })).snippetsCount;
   const swHeap = (await sw.c.send('Runtime.getHeapUsage')).result?.usedSize ?? null;
   const pgHeap = await pg.metric('JSHeapUsedSize');
+  await pg.send('Page.reload'); await sleep(3500); await pg.send('Page.bringToFront'); // fresh content script with the full library (matches a user opening a new tab)
   // latency: type the shortcut of a late snippet, time until replaced
   const lat = [];
   for (let k = 0; k < 8; k++) {
-    const sc = `zz${String(target - 1 - k).padStart(5, '0')}`;
+    const sc = code4(target - 1 - k);
     await pg.eval(`(() => { const t = document.getElementById('ta'); t.value = ''; t.focus(); })()`);
     for (const ch of sc.slice(0, -1)) { await pg.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ch, text: ch }); await pg.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ch }); }
     const t0 = performance.now();
@@ -94,6 +97,8 @@ for (const target of [100, 1000, 5000]) {
     for (let w = 0; w < 200; w++) { if ((await pg.eval(`document.getElementById('ta').value`)).startsWith('Body of')) break; await sleep(2); }
     lat.push(performance.now() - t0);
   }
+  if (process.env.DEBUG_PERF) console.log('DEBUG', target, 'status', JSON.stringify(await msg({ action: 'GET_STATUS' })), 'ta=', JSON.stringify(await pg.eval(`document.getElementById('ta').value`)), 'url=', await pg.eval('location.href'));
+  if (process.env.DEBUG_PERF) console.log('DEBUG', target, JSON.stringify(await pg.eval(`({ v: document.getElementById('ta').value.slice(0, 20), active: document.activeElement && document.activeElement.id, focus: document.hasFocus(), vis: document.visibilityState })`)), 'lat0=', lat[0]);
   lat.sort((a, b) => a - b);
   const ok = (await pg.eval(`document.getElementById('ta').value`)).startsWith('Body of');
   rows.push({ snippets: n, syncPayloadKB: +(raw.length / 1024).toFixed(0), swHeapMB: swHeap === null ? null : +(swHeap / 1048576).toFixed(1), pageHeapMB: +(pgHeap / 1048576).toFixed(1), keyToExpandMs_median: +lat[Math.floor(lat.length / 2)].toFixed(0), keyToExpandMs_max: +lat[lat.length - 1].toFixed(0), expansionCorrect: ok });

@@ -1,4 +1,4 @@
-import { Select, Switch, FilePicker } from '../components/ui.js';
+import { Select, Switch, HotkeyRecorder } from '../components/ui.js';
 import { confirmDialog, alertDialog } from '../components/Dialogs.js';
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
@@ -115,13 +115,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
             Keyboard Assistant Hotkey
           </label>
-          <input
-            type="text"
-            className="input input-mono"
-            value={prefs.assistantShortcut}
-            onChange={(e) => setPrefs({ ...prefs, assistantShortcut: e.target.value })}
-            placeholder="Ctrl+Shift+Space"
-          />
+          <HotkeyRecorder value={prefs.assistantShortcut} onChange={(v) => setPrefs({ ...prefs, assistantShortcut: v })} ariaLabel="Assistant hotkey" />
           <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
             Opens quick search assistant on any webpage to insert snippets without remembering shortcuts.
           </span>

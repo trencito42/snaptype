@@ -1,7 +1,10 @@
+import { buildMenuModel, MENU_IDS } from './context-menu.js';
 import { Snippet, UserPreferences, DEFAULT_PREFERENCES, SyncResponse, DataTable, isValidWorkspaceId } from '@snaptype/shared';
 import { BrowserApi } from '@snaptype/browser-compat';
 
 declare const __SNAPTYPE_API_URL__: string;
+declare const __SNAPTYPE_APP_URL__: string;
+const APP_URL = typeof __SNAPTYPE_APP_URL__ !== 'undefined' ? __SNAPTYPE_APP_URL__ : 'http://localhost:5173';
 
 const API_BASE = typeof __SNAPTYPE_API_URL__ !== 'undefined' 
   ? __SNAPTYPE_API_URL__ 
@@ -32,12 +35,28 @@ const state: BackgroundState = {
 };
 
 // Initialize background lifecycle and alarm jobs (ST-009 & ST-018)
+/**
+ * Restores the persisted session (token + selected workspace). MV3 service workers are terminated when
+ * idle, and a message that wakes the worker can arrive before this finished: every message handler awaits
+ * `sessionRestored`, otherwise it would answer "not signed in / no snippets" during a cold start.
+ */
+async function restoreSession(): Promise<void> {
+  try {
+    const authStore = BrowserApi.getAuthStorage();
+    const stored = await authStore.get(['snaptype_token', 'snaptype_workspace']);
+    if (stored && stored.snaptype_token) {
+      state.token = stored.snaptype_token;
+      state.currentWorkspaceId = stored.snaptype_workspace || null;
+    }
+  } catch (err) {
+    console.warn('[SnapType Background] Could not restore the session from storage:', err);
+  }
+}
+const sessionRestored: Promise<void> = restoreSession();
+
 async function init() {
-  const authStore = BrowserApi.getAuthStorage();
-  const stored = await authStore.get(['snaptype_token', 'snaptype_workspace']);
-  if (stored && stored.snaptype_token) {
-    state.token = stored.snaptype_token;
-    state.currentWorkspaceId = stored.snaptype_workspace || null;
+  await sessionRestored;
+  if (state.token) {
     await fetchWorkspaces();
     await syncWithServer();
   }
@@ -66,19 +85,29 @@ function setupAlarms() {
   }
 }
 
-function updateContextMenu(shortcut?: string) {
-  try {
-    const hotkey = shortcut || state.preferences.assistantShortcut || 'Ctrl+Shift+Space';
-    BrowserApi.api.contextMenus.removeAll(() => {
-      BrowserApi.api.contextMenus.create({
-        id: 'snaptype-insert-assistant',
-        title: `Insert SnapType Snippet (${hotkey})`,
-        contexts: ['editable']
+// Context menus are rebuilt from the current state (favourite/most used snippets, sign-in state).
+// Rebuilds are serialised: removeAll/create are asynchronous and overlapping rebuilds would hit duplicate ids.
+let menuRebuild: Promise<void> = Promise.resolve();
+function updateContextMenu(_shortcut?: string) {
+  menuRebuild = menuRebuild.then(() => new Promise<void>((resolve) => {
+    try {
+      const model = buildMenuModel({
+        authenticated: Boolean(state.token),
+        hotkey: state.preferences.assistantShortcut || 'Ctrl+Shift+Space',
+        snippets: state.snippets
       });
-    });
-  } catch {
-    // contextMenus might not be available in some testing contexts
-  }
+      BrowserApi.api.contextMenus.removeAll(() => {
+        for (const item of model) {
+          try {
+            BrowserApi.api.contextMenus.create(item as any, () => { void BrowserApi.api.runtime.lastError; });
+          } catch { /* a context type may be unsupported by this browser; skip the item */ }
+        }
+        resolve();
+      });
+    } catch {
+      resolve(); // contextMenus might not be available in some testing contexts
+    }
+  }));
 }
 
 // Alarms listener for MV3 periodic wake up and sync
@@ -102,9 +131,28 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
 
 // Context menu click listener
 if (typeof chrome !== 'undefined' && chrome.contextMenus) {
-  chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === 'snaptype-insert-assistant' && tab?.id) {
-      chrome.tabs.sendMessage(tab.id, { action: 'OPEN_ASSISTANT' });
+  chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    await sessionRestored;
+    const id = String(info.menuItemId);
+    const tabId = tab?.id;
+    const toFrame = { frameId: info.frameId ?? 0 };
+    const openUrl = (url: string) => chrome.tabs.create({ url });
+
+    if (id === MENU_IDS.signIn || id === MENU_IDS.openDashboard) { openUrl(APP_URL); return; }
+    if (id === MENU_IDS.sync || id === MENU_IDS.syncAction) { await syncWithServer(); return; }
+    if (id === MENU_IDS.saveSelection) {
+      const text = (info.selectionText || '').slice(0, 5000);
+      if (text.trim()) openUrl(`${APP_URL.replace(/\/$/, '')}/?new=${encodeURIComponent(text)}`);
+      return;
+    }
+    if (!tabId) return;
+    if (id === MENU_IDS.assistant || id === 'snaptype-insert-assistant') {
+      chrome.tabs.sendMessage(tabId, { action: 'OPEN_ASSISTANT' }, toFrame, () => void chrome.runtime.lastError);
+      return;
+    }
+    if (id.startsWith(MENU_IDS.snippetPrefix)) {
+      const snippet = state.snippets.find((x) => x.id === id.slice(MENU_IDS.snippetPrefix.length));
+      if (snippet) chrome.tabs.sendMessage(tabId, { action: 'EXPAND_SNIPPET', snippet }, toFrame, () => void chrome.runtime.lastError);
     }
   });
 }
@@ -174,6 +222,7 @@ async function syncWithServer(): Promise<boolean> {
       state.tables = [];
       state.currentRevision = 0;
       state.lastSyncTime = Date.now();
+      updateContextMenu();
       const sessionStore = BrowserApi.getSessionStorage();
       await sessionStore.set({
         snaptype_cache: {
@@ -192,7 +241,6 @@ async function syncWithServer(): Promise<boolean> {
     state.currentRevision = data.currentRevision;
     if (data.preferences) {
       state.preferences = data.preferences;
-      updateContextMenu(data.preferences.assistantShortcut);
     }
     state.lastSyncTime = Date.now();
     if (data.tables !== undefined) {
@@ -214,6 +262,8 @@ async function syncWithServer(): Promise<boolean> {
       for (const s of incoming) map.set(s.id, s);
       state.snippets = Array.from(map.values());
     }
+
+    updateContextMenu(); // favourite / most used snippets and the hotkey hint
 
     // Save in-memory session cache
     const sessionStore = BrowserApi.getSessionStorage();
@@ -269,11 +319,13 @@ async function handleLogout() {
   await sessionStore.clear();
 
   notifyTabsDataUpdated();
+  updateContextMenu();
 }
 
 // Runtime message dispatcher
 BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendResponse: (res: any) => void) => {
   const handleAsync = async () => {
+    await sessionRestored;
     switch (message.action) {
       case 'GET_DATA':
       case 'GET_SNIPPETS': {

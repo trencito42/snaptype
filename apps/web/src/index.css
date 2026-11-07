@@ -27,6 +27,7 @@
   --shadow-soft: 0 1px 2px rgba(19, 20, 18, .04), 0 8px 24px rgba(19, 20, 18, .06);
 
   --font-sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Clarity City', 'Inter Variable', Inter, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -195,3 +196,14 @@ html { background: var(--background); }
   .stack-sm { flex-direction: column !important; }
   .stack-sm > .stack-sm-side { width: 100% !important; max-height: 36%; border-right: 0 !important; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 }
+
+/* Headings use Clarity City (self-hosted); body copy stays Inter */
+h1, h2, h3, h4, .wordmark { font-family: var(--font-display); }
+.wordmark, h1, h2 { letter-spacing: -0.03em; }
+
+/* One control height everywhere: inputs, selects, hotkey recorder, switches' rows */
+:root { --control-h: 44px; }
+input.input, .ui-select, .ui-hotkey { min-height: var(--control-h); height: var(--control-h); box-sizing: border-box; }
+textarea.input { height: auto; min-height: 88px; }
+.ui-select-sm { min-height: 36px; height: 36px; }
+input.input-mono { font-size: 14px; }

@@ -1,6 +1,6 @@
 import { Select, Switch, FilePicker } from '../components/ui.js';
 import { confirmDialog, alertDialog } from '../components/Dialogs.js';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api.js';
 import { Snippet, Folder, User, Workspace, SnippetRevision } from '@snaptype/shared';
 import { renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
@@ -159,6 +159,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return () => clearTimeout(timer);
   }, [editName, editShortcut, editFolderId, editPlainContent, editDescription, editTags, editIsFavorite, editIsEnabled]);
 
+  // "Save selection as snippet" from the browser extension opens /?new=<text>
+  const prefillHandled = useRef(false);
+  useEffect(() => {
+    if (prefillHandled.current || loading || !activeWorkspaceId) return;
+    const params = new URLSearchParams(window.location.search);
+    const text = params.get('new');
+    if (text === null) return;
+    prefillHandled.current = true;
+    params.delete('new');
+    const rest = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
+    if (text.trim()) {
+      void handleCreateSnippet(text.slice(0, 5000)).then(() => setMobilePane('editor'));
+    }
+  }, [loading, activeWorkspaceId]);
+
   // Initial Data Load
   useEffect(() => {
     loadInitialData();
@@ -285,10 +301,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     await refreshData(newWsId);
   };
 
-  const handleCreateSnippet = async () => {
+  const handleCreateSnippet = async (prefillText?: string) => {
     try {
       const folderId = (selectedFolderId !== 'all' && selectedFolderId !== 'favorites') ? selectedFolderId : null;
-      let shortcutBase = 'snip';
+      let shortcutBase = prefillText ? 'new' : 'snip';
       let shortcut = shortcutBase;
       let counter = 1;
       while (snippets.some((s) => s.shortcut === shortcut)) {
@@ -297,9 +313,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       const res = await api.createSnippet({
         workspaceId: activeWorkspaceId,
-        name: 'New Snippet',
+        name: prefillText ? (prefillText.replace(/\s+/g, ' ').trim().slice(0, 40) || 'New Snippet') : 'New Snippet',
         shortcut,
-        plainContent: 'Hello, thank you for reaching out!',
+        plainContent: prefillText ?? 'Hello, thank you for reaching out!',
         folderId,
         tags: [],
         isFavorite: false,
@@ -534,7 +550,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const previewResult = renderSnippet(editPlainContent, { variables: previewVars });
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100dvh - 68px)', minHeight: 0, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: 'calc(100dvh - 57px)', minHeight: 0, overflow: 'hidden' }}>
       {/* PANE 1: Folders & Navigation */}
       <div style={{
         width: isMobile ? '100%' : 260,

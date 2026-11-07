@@ -49,7 +49,8 @@ function isMatchingHotkey(e: KeyboardEvent, shortcutStr?: string): boolean {
     return true;
   }
 
-  return e.key.toLowerCase() === keyPart || e.code.toLowerCase() === `key${keyPart}`;
+  const code = e.code.toLowerCase();
+  return e.key.toLowerCase() === keyPart || code === `key${keyPart}` || code === `digit${keyPart}` || code === keyPart;
 }
 
 export class ContentEngine {
@@ -85,18 +86,31 @@ export class ContentEngine {
     this.isExcluded = DomDetector.isExcludedDomain(hostname, this.preferences.excludedDomains);
   }
 
-  public async refreshData() {
+  private refreshSeq = 0;
+
+  /**
+   * Fetch the library from the background worker. The worker may be cold-starting (MV3 workers are
+   * terminated when idle), so a failed request is retried a few times with backoff instead of leaving
+   * the page without snippets. Responses can arrive out of order: only the latest request may apply.
+   */
+  public async refreshData(attempt = 0): Promise<void> {
+    const seq = ++this.refreshSeq;
     try {
       const response = await BrowserApi.sendMessage({ action: 'GET_DATA' });
+      if (seq !== this.refreshSeq) return;
       if (response && response.snippets) {
         this.snippets = response.snippets;
         this.tables = response.tables || [];
         this.preferences = response.preferences || this.preferences;
         this.updateExclusionStatus();
         this.matcher.rebuild(this.snippets, this.preferences.caseSensitive);
+        return;
       }
+      throw new Error('empty response');
     } catch {
-      // background service worker might be cold-starting
+      if (seq !== this.refreshSeq || attempt >= 3) return;
+      const delay = [400, 1500, 4000][attempt];
+      setTimeout(() => { if (seq === this.refreshSeq) void this.refreshData(attempt + 1); }, delay);
     }
   }
 

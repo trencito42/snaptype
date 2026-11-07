@@ -33,3 +33,13 @@
 .ui-file-name { font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 
 @media (prefers-reduced-motion: reduce) { .ui-select-caret, .ui-switch, .ui-switch-knob { transition: none; } }
+
+.ui-hotkey-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ui-hotkey { flex: 1; min-width: 180px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; font: inherit; color: var(--ink); text-align: left; background: var(--surface-subtle); border: 1px solid transparent; border-radius: 14px; cursor: pointer; }
+.ui-hotkey:hover { background: var(--surface-hover); }
+.ui-hotkey:focus-visible, .ui-hotkey.is-recording { outline: none; background: var(--surface); border-color: var(--ink); box-shadow: 0 0 0 3px rgba(133, 246, 106, .45); }
+.ui-hotkey kbd { display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; font-family: var(--font-sans); font-size: 13px; font-weight: 650; background: var(--surface); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 8px; }
+.ui-hotkey-empty { color: var(--text-secondary); font-size: 14px; }
+.ui-hotkey-reset { background: none; border: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.ui-hotkey-reset:disabled { opacity: .4; cursor: default; text-decoration: none; }
+.ui-hotkey-hint { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--danger); }

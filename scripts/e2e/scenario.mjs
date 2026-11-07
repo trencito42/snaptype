@@ -1,7 +1,7 @@
 // Browser-agnostic end-to-end scenario shared by the Chrome and Firefox runners.
 // The runner supplies an adapter; every check below talks to the REAL extension through it.
 export async function runScenario(ctx) {
-  const { record, skip, sleep, msg, page, typeInto, pressKey, getToken, getStoredKeys, setOffline, otpFor, email, API_PORT } = ctx;
+  const { record, skip, sleep, msg, page, typeInto, pressKey, getToken, getStoredKeys, setOffline, sendToPage, otpFor, email, API_PORT } = ctx;
   // Expansion in real fields
   const val = (sel, prop = 'value') => page.eval(`document.querySelector(${JSON.stringify(sel)}).${prop}`);
 
@@ -29,6 +29,23 @@ export async function runScenario(ctx) {
   await page.eval(`document.querySelector('#ta').value=''`);
   await typeInto('#ta', 'msver');
   record('edited snippet text is used after sync (no logout needed)', (await val('#ta')) === 'EDITED-ON-SERVER', JSON.stringify(await val('#ta')));
+
+  // Context-menu path: the background sends EXPAND_SNIPPET to the page frame the user right-clicked in
+  if (!sendToPage) { skip('context menu insert (EXPAND_SNIPPET message)', 'not supported by this browser adapter'); } else {
+    const data = await msg({ action: 'GET_DATA' });
+    const sn = data.snippets.find((x) => x.shortcut === 'msver');
+    await page.eval(`(() => { const t = document.querySelector('#ta'); t.value = ''; t.focus(); })()`);
+    await sendToPage({ action: 'EXPAND_SNIPPET', snippet: sn });
+    await sleep(500);
+    record('context menu: inserting a snippet from the menu puts its text into the focused field', (await val('#ta')) === 'EDITED-ON-SERVER', JSON.stringify(await val('#ta')));
+    const formSn = data.snippets.find((x) => x.shortcut === '/salut');
+    await page.eval(`(() => { const t = document.querySelector('#ta'); t.value = ''; t.focus(); })()`);
+    await sendToPage({ action: 'EXPAND_SNIPPET', snippet: formSn });
+    await sleep(500);
+    record('context menu: a snippet with fields opens the fill-in form first', (await page.eval(`!!document.querySelector('.snaptype-modal')`)) === true);
+    await pressKey('Escape');
+    await sleep(300);
+  }
 
   // Dynamic form snippet: form appears, values are applied, Esc cancels safely
   await page.eval(`document.querySelector('#ta').value=''`);

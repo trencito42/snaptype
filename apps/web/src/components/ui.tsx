@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef,
 import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCheck, faChevronDown } from '@fortawesome/free-solid-svg-icons';
+import { comboFromEvent, RESERVED_COMBOS } from '../utils/hotkey.js';
 import './ui.css';
 
 /* ───────── Select (custom listbox, fully keyboard accessible) ───────── */
@@ -215,5 +216,63 @@ export const FilePicker: React.FC<FilePickerProps> = ({ accept, onFile, label = 
       <button type="button" className="btn btn-secondary btn-sm" onClick={() => ref.current?.click()}>{label}</button>
       {name && <span className="ui-file-name" title={name}>{name}</span>}
     </span>
+  );
+};
+
+/* ───────── Hotkey recorder (captures a key combination, never typed as text) ───────── */
+
+interface HotkeyRecorderProps {
+  value: string;
+  onChange: (value: string) => void;
+  defaultValue?: string;
+  ariaLabel?: string;
+}
+
+export const HotkeyRecorder: React.FC<HotkeyRecorderProps> = ({ value, onChange, defaultValue = 'Ctrl+Shift+Space', ariaLabel = 'Keyboard shortcut' }) => {
+  const [recording, setRecording] = useState(false);
+  const [live, setLive] = useState('');
+  const [hint, setHint] = useState<string | null>(null);
+  const ref = useRef<HTMLButtonElement>(null);
+  const hintId = useId();
+
+  const stop = () => { setRecording(false); setLive(''); };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!recording) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHint(null); setRecording(true); }
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') { stop(); setHint(null); return; }
+    const { combo, complete } = comboFromEvent(e.nativeEvent);
+    if (!complete) { setLive(combo); return; }
+    const hasStrongModifier = e.ctrlKey || e.altKey || e.metaKey;
+    if (!hasStrongModifier) { setHint('Include Ctrl, Alt or Cmd so normal typing never triggers it.'); setLive(combo); return; }
+    if (RESERVED_COMBOS.has(combo)) { setHint(`${combo} is used by the browser. Choose another combination.`); setLive(combo); return; }
+    setHint(null);
+    onChange(combo);
+    stop();
+  };
+
+  const parts = (recording ? live : value).split('+').filter(Boolean);
+  return (
+    <div className="ui-hotkey-wrap">
+      <button
+        ref={ref}
+        type="button"
+        className={`ui-hotkey ${recording ? 'is-recording' : ''}`}
+        aria-label={`${ariaLabel}: ${value}. Press Enter to record a new one.`}
+        aria-describedby={hint ? hintId : undefined}
+        onClick={() => { setHint(null); setRecording(true); setLive(''); ref.current?.focus(); }}
+        onKeyDown={onKeyDown}
+        onBlur={stop}
+      >
+        {parts.length === 0 && <span className="ui-hotkey-empty">{recording ? 'Press your shortcut…' : 'Click to record'}</span>}
+        {parts.map((p, i) => <kbd key={i}>{p === 'Meta' ? 'Cmd' : p}</kbd>)}
+        {recording && parts.length > 0 && <span className="ui-hotkey-empty">…</span>}
+      </button>
+      <button type="button" className="ui-hotkey-reset" onClick={() => { setHint(null); onChange(defaultValue); }} disabled={value === defaultValue}>Reset</button>
+      {hint && <p id={hintId} role="alert" className="ui-hotkey-hint">{hint}</p>}
+    </div>
   );
 };
