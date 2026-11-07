@@ -381,6 +381,7 @@ export class ContentEngine {
   private openDynamicForm(target: HTMLElement, snippet: Snippet, fields: DynamicFormField[], matchLength: number) {
     if (this.formOverlay) this.formOverlay.remove();
 
+    const isTextControl = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
     let savedRange: Range | null = null;
     let savedSelectionStart = -1;
     let savedSelectionEnd = -1;
@@ -509,7 +510,7 @@ export class ContentEngine {
       this.formOverlay = null;
       target.focus();
       try {
-        if (savedRange && window.getSelection) {
+        if (!isTextControl && savedRange && window.getSelection) {
           const sel = window.getSelection();
           if (sel) {
             sel.removeAllRanges();
@@ -570,7 +571,7 @@ export class ContentEngine {
 
       target.focus();
       try {
-        if (savedRange && window.getSelection) {
+        if (!isTextControl && savedRange && window.getSelection) {
           const sel = window.getSelection();
           if (sel) {
             sel.removeAllRanges();
@@ -748,8 +749,9 @@ export class ContentEngine {
 
       // Restore focus and precise Range/Caret position (ST-014)
       target.focus();
+      const isTextControl = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
       try {
-        if (savedRange && window.getSelection) {
+        if (!isTextControl && savedRange && window.getSelection) {
           const sel = window.getSelection();
           if (sel) {
             sel.removeAllRanges();

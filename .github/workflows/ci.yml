@@ -54,6 +54,9 @@ jobs:
       - name: Package Extension Archives
         run: npm run package:extensions
 
+      - name: Real Chrome extension end-to-end test (throw-away API, headless Chrome)
+        run: node scripts/e2e/chrome-extension-e2e.mjs /usr/bin/google-chrome
+
       - name: Keep development extension archives as CI artifacts
         run: |
           mkdir -p artifacts

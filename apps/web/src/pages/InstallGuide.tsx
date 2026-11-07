@@ -1,82 +1,62 @@
 import React from 'react';
-import { Download, Chrome, Globe, Terminal, CheckCircle2 } from 'lucide-react';
 
-export const InstallGuide: React.FC = () => {
-  return (
-    <div style={{ maxWidth: 840, margin: '0 auto', padding: '40px 24px 100px' }}>
-      <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: -0.5, marginBottom: 8 }}>
-        Extension Installation Guide
-      </h1>
-      <p style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 36 }}>
-        SnapType provides lightweight, production-ready builds for both Chromium (Chrome, Edge, Brave) and Mozilla Firefox.
-      </p>
-
-      {/* Chrome Guide */}
-      <div style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)',
-        padding: 28,
-        marginBottom: 28
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: 'var(--surface-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Chrome size={20} />
-          </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700 }}>Google Chrome & Chromium (MV3)</h2>
-        </div>
-
-        <ol style={{ paddingLeft: 20, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-          <li>Build the Chrome extension bundle: <code className="badge badge-mono">npm run build:extension:chrome</code></li>
-          <li>In Chrome, navigate to <code className="badge badge-mono">chrome://extensions</code></li>
-          <li>Toggle on <strong>Developer mode</strong> in the top-right corner.</li>
-          <li>Click the <strong>Load unpacked</strong> button in the top-left corner.</li>
-          <li>Select the <code className="badge badge-mono">dist/chrome</code> directory from this repository.</li>
-          <li>The SnapType icon will appear in your browser extension toolbar!</li>
-        </ol>
-      </div>
-
-      {/* Firefox Guide */}
-      <div style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)',
-        padding: 28,
-        marginBottom: 28
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: 'var(--surface-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Globe size={20} />
-          </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700 }}>Mozilla Firefox (MV3)</h2>
-        </div>
-
-        <ol style={{ paddingLeft: 20, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-          <li>Build the Firefox extension bundle: <code className="badge badge-mono">npm run build:extension:firefox</code></li>
-          <li>In Firefox, navigate to <code className="badge badge-mono">about:debugging#/runtime/this-firefox</code></li>
-          <li>Click <strong>Load Temporary Add-on...</strong></li>
-          <li>Select the <code className="badge badge-mono">dist/firefox/manifest.json</code> file.</li>
-          <li>SnapType is now active for your Firefox browsing session!</li>
-        </ol>
-      </div>
-
-      {/* Release Artifacts */}
-      <div style={{
-        background: 'var(--surface-subtle)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)',
-        padding: 24
-      }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Packaged Store Archives</h3>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14 }}>
-          Run <code className="badge badge-mono">npm run package:extensions</code> to automatically generate the submission-ready zip files:
-        </p>
-        <ul style={{ paddingLeft: 20, fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--font-mono)' }}>
-          <li>dist/chrome-extension.zip (Chrome Web Store format)</li>
-          <li>dist/firefox-extension.zip (Firefox AMO format)</li>
-        </ul>
-      </div>
-    </div>
-  );
+const card: React.CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-md)',
+  padding: 24,
+  marginBottom: 20
 };
+const steps: React.CSSProperties = { paddingLeft: 20, fontSize: 15, color: 'var(--text-secondary)', lineHeight: 1.8 };
 
+export const InstallGuide: React.FC = () => (
+  <div style={{ maxWidth: 820, margin: '0 auto', padding: '32px 16px 72px' }}>
+    <h1 style={{ fontSize: 'clamp(1.6rem, 5vw, 2.2rem)', fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 8 }}>
+      Install the SnapType extension
+    </h1>
+    <p style={{ color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.6 }}>
+      SnapType works in Chrome-based browsers (Chrome, Edge, Brave) and in Firefox.
+    </p>
+
+    <div style={{ ...card, background: 'var(--surface-subtle)' }} role="note">
+      <strong>Availability:</strong> the extension is not published on the Chrome Web Store or Firefox Add-ons yet, so there
+      is no store button. Until it is, install it from the release packages (<code>chrome-extension.zip</code>,{' '}
+      <code>firefox-extension.zip</code>) provided by whoever runs your SnapType server.
+    </div>
+
+    <section style={card} aria-labelledby="chrome-h">
+      <h2 id="chrome-h" style={{ fontSize: 18, marginBottom: 10 }}>Chrome, Edge, Brave</h2>
+      <ol style={steps}>
+        <li>Unzip <code>chrome-extension.zip</code> to a folder you will keep.</li>
+        <li>Open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>) and turn on <strong>Developer mode</strong>.</li>
+        <li>Choose <strong>Load unpacked</strong> and select the unzipped folder.</li>
+        <li>Pin SnapType from the puzzle-piece menu, open it and sign in with your email code.</li>
+      </ol>
+    </section>
+
+    <section style={card} aria-labelledby="ff-h">
+      <h2 id="ff-h" style={{ fontSize: 18, marginBottom: 10 }}>Firefox</h2>
+      <ol style={steps}>
+        <li>Open <code>about:debugging#/runtime/this-firefox</code>.</li>
+        <li>Choose <strong>Load Temporary Add-on…</strong> and select <code>firefox-extension.zip</code> (or its <code>manifest.json</code>).</li>
+        <li>Open SnapType from the toolbar and sign in.</li>
+      </ol>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+        Firefox removes temporary add-ons when it restarts. A permanent install needs a signed package from Mozilla Add-ons.
+      </p>
+    </section>
+
+    <section style={card} aria-labelledby="try-h">
+      <h2 id="try-h" style={{ fontSize: 18, marginBottom: 10 }}>Check that it works</h2>
+      <ol style={steps}>
+        <li>Create a snippet in the dashboard, for example shortcut <code>/thx</code>.</li>
+        <li>Open any page with a text box and type the shortcut. It should expand in place.</li>
+        <li>If nothing happens, press <strong>Sync</strong> in the extension popup, confirm the workspace matches the one in the dashboard, and try the Test playground page.</li>
+      </ol>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+        SnapType does not expand text in password fields or other sensitive inputs. Some rich-text editors may behave
+        differently; compatibility has not been verified for every site.
+      </p>
+    </section>
+  </div>
+);
