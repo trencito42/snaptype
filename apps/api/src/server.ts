@@ -32,6 +32,17 @@ export async function createServer(): Promise<FastifyInstance> {
     .map((o) => o.trim().toLowerCase())
     .filter(Boolean);
 
+  if (process.env.APP_URL) {
+    try {
+      const appOrigin = new URL(process.env.APP_URL).origin.toLowerCase();
+      if (!allowedOrigins.includes(appOrigin)) {
+        allowedOrigins.push(appOrigin);
+      }
+    } catch {
+      // Ignore URL parse error
+    }
+  }
+
   await app.register(cors, {
     origin: (origin, cb) => {
       // Allow non-browser requests (e.g. mobile, curl, server-to-server)

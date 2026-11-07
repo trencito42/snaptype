@@ -48,3 +48,4 @@
 | **ST-044** | Overbroad manifest host permissions in release extensions | P1 | Extension Security | OPEN | `apps/extension/build.js` |
 | **ST-045** | Database migration runner lacks version tracking and rollback | P1 | Database Infra | OPEN | `infrastructure/migrations/` |
 | **ST-046** | Documentation contradictions on test claims & benchmarks | P1 | Documentation | OPEN | `TESTING.md`, `PERFORMANCE_REPORT.md` |
+

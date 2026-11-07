@@ -142,4 +142,24 @@ describe('Milestone D: Folder Security & Hierarchy Tests (ST-032 & ST-033)', () 
     expect(createdSnippet).toBeDefined();
     expect(createdSnippet!.folderId).toBe(importedChild!.id);
   });
+
+  it('rejects folder creation if parentId belongs to a different workspace (Requirement 19)', async () => {
+    // Create folder in a different workspace
+    const otherWs = await repo.createWorkspace('Other Team', 'other-team', userId, false);
+    const foreignFolder = await repo.createFolder(otherWs.id, { name: 'Foreign Folder' });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/folders',
+      headers: { Authorization: `Bearer ${userToken}` },
+      payload: {
+        workspaceId,
+        name: 'Malicious Subfolder',
+        parentId: foreignFolder.id
+      }
+    });
+
+    expect(createRes.statusCode).toBe(400);
+    expect(createRes.json().error).toContain('Parent folder must belong to the same workspace');
+  });
 });

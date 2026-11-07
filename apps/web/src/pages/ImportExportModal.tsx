@@ -90,6 +90,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
 
     try {
       let parsedSnippets: any[] = [];
+      let parsedFolders: any[] = [];
 
       if (importFormat === 'csv') {
         const rows = parseCSV(importText);
@@ -124,11 +125,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({ isOpen, on
         }
       } else {
         const parsed = JSON.parse(importText);
-        parsedSnippets = Array.isArray(parsed) ? parsed : parsed.snippets || [];
+        parsedSnippets = Array.isArray(parsed) ? parsed : (parsed.snippets || []);
+        parsedFolders = Array.isArray(parsed) ? [] : (parsed.folders || []);
       }
 
       const res = await api.importSnippets({
         snippets: parsedSnippets,
+        folders: parsedFolders,
         format: importFormat,
         conflictStrategy
       });

@@ -91,20 +91,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showDataTablesModal, setShowDataTablesModal] = useState(false);
 
-  // Debounced Autosave refs (ST-035)
+  // Debounced Autosave refs (ST-035 & Requirement 17)
   const isInitialLoad = React.useRef(true);
   const snippetLoadedRef = React.useRef<string | null>(null);
+  const isDirty = React.useRef(false);
 
   useEffect(() => {
     if (isInitialLoad.current) {
       isInitialLoad.current = false;
       return;
     }
-    if (!selectedSnippetId) return;
-    if (snippetLoadedRef.current !== selectedSnippetId) {
-      snippetLoadedRef.current = selectedSnippetId;
+    if (!isDirty.current) {
       return;
     }
+    if (!selectedSnippetId) return;
 
     const timer = setTimeout(() => {
       handleSaveSnippet();
@@ -154,6 +154,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const selectSnippet = (snippet: Snippet) => {
+    isDirty.current = false;
     snippetLoadedRef.current = snippet.id;
     setSelectedSnippetId(snippet.id);
     setEditName(snippet.name);
@@ -232,6 +233,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       });
 
       setSaveStatus('saved');
+      isDirty.current = false;
       setSnippets(snippets.map((s) => (s.id === res.snippet.id ? res.snippet : s)));
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch (err: any) {
@@ -353,10 +355,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const insertCommand = (syntax: string) => {
+    isDirty.current = true;
     setEditPlainContent((prev) => (prev ? `${prev} ${syntax}` : syntax));
   };
 
   const wrapFormat = (prefix: string, suffix: string = prefix, defaultText: string = 'text') => {
+    isDirty.current = true;
     setEditPlainContent((prev) => (prev ? `${prev} ${prefix}${defaultText}${suffix}` : `${prefix}${defaultText}${suffix}`));
   };
 
@@ -718,7 +722,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       type="text"
                       className="input"
                       value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
+                      onChange={(e) => { setEditName(e.target.value); isDirty.current = true; }}
                     />
                   </div>
                   <div>
@@ -729,7 +733,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       type="text"
                       className="input input-mono"
                       value={editShortcut}
-                      onChange={(e) => setEditShortcut(e.target.value)}
+                      onChange={(e) => { setEditShortcut(e.target.value); isDirty.current = true; }}
                     />
                   </div>
                   <div>
@@ -739,7 +743,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <select
                       className="input"
                       value={editFolderId || ''}
-                      onChange={(e) => setEditFolderId(e.target.value || null)}
+                      onChange={(e) => { setEditFolderId(e.target.value || null); isDirty.current = true; }}
                     >
                       <option value="">(No Folder)</option>
                       {folders.map((f) => (
@@ -867,6 +871,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   >
                     <ListOrdered size={14} />
                   </button>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-secondary)', paddingRight: 6, fontWeight: 600 }}>
+                    Plain Text / Markdown
+                  </span>
                 </div>
 
                 {/* Main Content Area */}
@@ -883,7 +890,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       borderTopRightRadius: 0
                     }}
                     value={editPlainContent}
-                    onChange={(e) => setEditPlainContent(e.target.value)}
+                    onChange={(e) => { setEditPlainContent(e.target.value); isDirty.current = true; }}
                     placeholder="Enter your snippet text, formatting, or dynamic {{tags}} here..."
                   />
                 </div>
@@ -899,7 +906,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       className="input"
                       placeholder="suport, bonus, verificare"
                       value={editTags}
-                      onChange={(e) => setEditTags(e.target.value)}
+                      onChange={(e) => { setEditTags(e.target.value); isDirty.current = true; }}
                     />
                   </div>
                   <div>
@@ -911,7 +918,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       className="input"
                       placeholder="Short note about when to use"
                       value={editDescription}
-                      onChange={(e) => setEditDescription(e.target.value)}
+                      onChange={(e) => { setEditDescription(e.target.value); isDirty.current = true; }}
                     />
                   </div>
                 </div>

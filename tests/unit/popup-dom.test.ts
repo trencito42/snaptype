@@ -39,3 +39,4 @@ describe('ST-001: Extension Popup DOM Elements & Bindings', () => {
     expect(tsContent).toMatch(/const\s+authView\s*=\s*document\.getElementById\(['"]auth-view['"]\)/);
   });
 });
+

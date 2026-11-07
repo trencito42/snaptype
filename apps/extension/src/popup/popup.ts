@@ -99,26 +99,37 @@ function renderSnippetList(snippets: Snippet[]) {
     insertBtn.textContent = 'Insert';
     insertBtn.onclick = (e) => {
       e.stopPropagation();
-      const rendered = renderSnippet(s.plainContent);
+      insertBtn.disabled = true;
       try {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(
-              tabs[0].id,
-              {
-                action: 'INSERT_TEXT',
-                text: rendered.text,
-                cursorOffset: rendered.cursorOffset
-              },
-              () => {
-                insertBtn.textContent = 'Inserted!';
-                setTimeout(() => (insertBtn.textContent = 'Insert'), 1000);
-              }
-            );
+          if (!tabs[0]?.id) {
+            insertBtn.disabled = false;
+            insertBtn.textContent = 'No tab';
+            setTimeout(() => (insertBtn.textContent = 'Insert'), 1200);
+            return;
           }
+          chrome.tabs.sendMessage(
+            tabs[0].id,
+            {
+              action: 'EXPAND_SNIPPET',
+              snippet: s
+            },
+            (response) => {
+              insertBtn.disabled = false;
+              if (response && response.success) {
+                insertBtn.textContent = response.openedForm ? 'Form Opened' : 'Inserted!';
+                setTimeout(() => (insertBtn.textContent = 'Insert'), 1200);
+              } else {
+                insertBtn.textContent = response?.error ? 'Blocked' : 'Failed';
+                setTimeout(() => (insertBtn.textContent = 'Insert'), 1200);
+              }
+            }
+          );
         });
       } catch {
-        // Tab not available or permissions restricted
+        insertBtn.disabled = false;
+        insertBtn.textContent = 'Failed';
+        setTimeout(() => (insertBtn.textContent = 'Insert'), 1200);
       }
     };
 

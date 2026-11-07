@@ -55,7 +55,7 @@ export interface IRepository {
   createWorkspaceInvitation(workspaceId: string, email: string, role: WorkspaceRole, invitedById: string, token: string, expiresAt: Date): Promise<WorkspaceInvitation>;
   findInvitationByToken(token: string): Promise<WorkspaceInvitation | null>;
   findWorkspaceInvitations(workspaceId: string): Promise<WorkspaceInvitation[]>;
-  revokeWorkspaceInvitation(id: string): Promise<void>;
+  revokeWorkspaceInvitation(workspaceId: string, id: string): Promise<void>;
   acceptWorkspaceInvitation(token: string, userId: string): Promise<WorkspaceMember>;
 
   // Folders
@@ -328,12 +328,14 @@ export class InMemoryRepository implements IRepository {
     expiresAt: Date
   ): Promise<WorkspaceInvitation> {
     const id = uuidv4();
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
     const inv: WorkspaceInvitation = {
       id,
       workspaceId,
       email: email.toLowerCase().trim(),
       role,
       token,
+      tokenHash,
       invitedById,
       expiresAt: expiresAt.toISOString(),
       acceptedAt: null,
@@ -345,8 +347,9 @@ export class InMemoryRepository implements IRepository {
   }
 
   async findInvitationByToken(token: string): Promise<WorkspaceInvitation | null> {
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
     for (const inv of this.invitations.values()) {
-      if (inv.token === token) return inv;
+      if (inv.tokenHash === tokenHash || inv.token === token) return inv;
     }
     return null;
   }
@@ -362,9 +365,9 @@ export class InMemoryRepository implements IRepository {
     return list;
   }
 
-  async revokeWorkspaceInvitation(id: string): Promise<void> {
+  async revokeWorkspaceInvitation(workspaceId: string, id: string): Promise<void> {
     const inv = this.invitations.get(id);
-    if (inv) {
+    if (inv && inv.workspaceId === workspaceId) {
       inv.revokedAt = new Date().toISOString();
     }
   }

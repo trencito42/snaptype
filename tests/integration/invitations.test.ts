@@ -143,4 +143,49 @@ describe('ST-007: Real Workspace Invitation Lifecycle & Token Verification', () 
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toContain('sent to a different email');
   });
+
+  it('stores SHA-256 token hash and prevents cross-workspace revocation', async () => {
+    // Create second workspace
+    const ws2 = await repo.createWorkspace('Marketing', 'marketing-org', ownerId, false);
+
+    const inviteRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceId}/members`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { email: 'charlie@company.com', role: 'editor' }
+    });
+
+    const inv = JSON.parse(inviteRes.body).invitation;
+    expect(inv.token).toBeDefined();
+
+    // Verify stored invitation in repository uses tokenHash
+    const stored = await repo.findInvitationByToken(inv.token);
+    expect(stored).not.toBeNull();
+    expect(stored?.tokenHash).toBeDefined();
+    expect(stored?.tokenHash?.length).toBe(64); // SHA-256 hex string
+
+    // Try to revokeCharlie's invitation using the wrong workspace ID
+    const wrongWsRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/workspaces/${ws2.id}/invitations/${inv.id}`,
+      headers: { authorization: `Bearer ${ownerToken}` }
+    });
+    expect(wrongWsRes.statusCode).toBe(200);
+
+    // Charlie's invitation in workspaceId must NOT be revoked!
+    const stillActive = await repo.findInvitationByToken(inv.token);
+    expect(stillActive?.revokedAt).toBeNull();
+
+    // Revoke with correct workspace ID
+    const correctWsRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/workspaces/${workspaceId}/invitations/${inv.id}`,
+      headers: { authorization: `Bearer ${ownerToken}` }
+    });
+    expect(correctWsRes.statusCode).toBe(200);
+
+    const nowRevoked = await repo.findInvitationByToken(inv.token);
+    expect(nowRevoked?.revokedAt).not.toBeNull();
+  });
 });
+

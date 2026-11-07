@@ -44,6 +44,11 @@ jobs:
       - name: Package Extension Archives
         run: npm run package:extensions
 
+      - name: Build & Package Production Release Extensions (No Loopback Permissions)
+        run: |
+          npm run build:extension:prod
+          npm run package:extensions:prod
+
       - name: Validate Docker Compose Configuration (ST-005)
         run: docker compose --env-file .env.docker.example config
 

@@ -41,6 +41,12 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
 
     const syncData = await repo.getSyncData(workspaceId, lastRevision);
     const preferences = await repo.getUserPreferences(user.id);
+    const rawTables = await repo.findTables(workspaceId);
+    const tables = [];
+    for (const t of rawTables) {
+      const rows = await repo.findTableRows(t.id);
+      tables.push({ ...t, rows });
+    }
 
     const response: SyncResponse = {
       currentRevision: syncData.currentRevision,
@@ -48,7 +54,8 @@ export async function syncRoutes(app: FastifyInstance, repo: IRepository, authSe
       deletedSnippetIds: syncData.deletedSnippetIds,
       folders: syncData.folders,
       deletedFolderIds: syncData.deletedFolderIds,
-      preferences
+      preferences,
+      tables
     };
 
     return response;

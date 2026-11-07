@@ -1,8 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import archiver from 'archiver';
+import { fileURLToPath } from 'node:url';
 
-const ROOT_DIST = path.resolve('../../dist');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIST = path.resolve(__dirname, '../../dist');
+
+const args = process.argv.slice(2);
+const isProduction = args.includes('--production') || process.env.NODE_ENV === 'production';
+
+function verifyTargetNotLocalhost(targetDir) {
+  const manifestPath = path.join(targetDir, 'manifest.json');
+  if (fs.existsSync(manifestPath)) {
+    const raw = fs.readFileSync(manifestPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    for (const perm of parsed.host_permissions || []) {
+      if (perm.includes('localhost') || perm.includes('127.0.0.1')) {
+        throw new Error(`Production release package in ${path.basename(targetDir)} contains illegal loopback permission: ${perm}`);
+      }
+    }
+  }
+}
 
 function zipDirectory(sourceDir, outPath) {
   return new Promise((resolve, reject) => {
@@ -27,6 +46,11 @@ async function packageAll() {
   const chromeDir = path.join(ROOT_DIST, 'chrome');
   const firefoxDir = path.join(ROOT_DIST, 'firefox');
 
+  if (isProduction) {
+    if (fs.existsSync(chromeDir)) verifyTargetNotLocalhost(chromeDir);
+    if (fs.existsSync(firefoxDir)) verifyTargetNotLocalhost(firefoxDir);
+  }
+
   if (fs.existsSync(chromeDir)) {
     await zipDirectory(chromeDir, path.join(ROOT_DIST, 'chrome-extension.zip'));
   }
@@ -42,4 +66,3 @@ packageAll().catch((err) => {
   console.error('Packaging error:', err);
   process.exit(1);
 });
-

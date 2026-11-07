@@ -1,9 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function findMigrationsDir(): string | null {
   const possiblePaths = [
@@ -22,6 +26,27 @@ function findMigrationsDir(): string | null {
   return null;
 }
 
+async function ensureColumnExists(
+  connection: mysql.Connection,
+  tableName: string,
+  columnName: string,
+  columnDefinition: string
+): Promise<void> {
+  try {
+    const [rows]: any = await connection.query(
+      `SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+      [tableName, columnName]
+    );
+    if (!rows || rows.length === 0) {
+      console.log(`[Migration] Adding missing column ${tableName}.${columnName}...`);
+      await connection.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${columnDefinition}`);
+    }
+  } catch (err) {
+    // If table doesn't exist yet (e.g. before 0001), ignore and continue
+    console.debug(`[Migration] ensureColumnExists check skipped for ${tableName}.${columnName}:`, (err as any)?.message);
+  }
+}
+
 export async function runMigrations(databaseUrl?: string): Promise<string[]> {
   const url = databaseUrl || process.env.DATABASE_URL;
   if (!url) {
@@ -38,7 +63,7 @@ export async function runMigrations(databaseUrl?: string): Promise<string[]> {
   const appliedMigrations: string[] = [];
 
   try {
-    // 1. Ensure schema_migrations table exists
+    // 1. Ensure schema_migrations table exists with standard id column
     await connection.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         id VARCHAR(255) PRIMARY KEY,
@@ -81,6 +106,10 @@ export async function runMigrations(databaseUrl?: string): Promise<string[]> {
       console.log(`[Migration] Successfully applied and recorded ${file}`);
       appliedMigrations.push(file);
     }
+
+    // 4. Ensure legacy tables receive upgrade columns safely without CLI DELIMITER dependencies
+    await ensureColumnExists(connection, 'folders', 'revision', 'INT NOT NULL DEFAULT 1 AFTER sort_order');
+    await ensureColumnExists(connection, 'snippets', 'revision', 'INT NOT NULL DEFAULT 1 AFTER version');
 
     console.log(`[Migration] Completed. Applied ${appliedMigrations.length} new migration(s).`);
     return appliedMigrations;

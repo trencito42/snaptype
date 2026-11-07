@@ -28,6 +28,26 @@ export async function userRoutes(app: FastifyInstance, repo: IRepository, authSe
 
   app.delete('/api/v1/me', { preHandler: requireAuth }, async (request, reply) => {
     const user = request.user!;
+
+    // Protect shared team workspaces from cascade deletion (ST-003 / Release Blocker 7)
+    const userWorkspaces = await repo.findUserWorkspaces(user.id);
+    const sharedWorkspacesAsOwner: string[] = [];
+
+    for (const uw of userWorkspaces) {
+      if (uw.role === 'owner' && !uw.workspace.isPersonal) {
+        const members = await repo.findWorkspaceMembers(uw.workspace.id);
+        if (members.length > 1) {
+          sharedWorkspacesAsOwner.push(uw.workspace.name);
+        }
+      }
+    }
+
+    if (sharedWorkspacesAsOwner.length > 0) {
+      return reply.status(400).send({
+        error: `Cannot delete account: you are the owner of shared workspace(s) (${sharedWorkspacesAsOwner.join(', ')}) with active members. Please transfer ownership or remove team members before deleting your account.`
+      });
+    }
+
     await repo.deleteUser(user.id);
     return { success: true, message: 'Account deleted' };
   });

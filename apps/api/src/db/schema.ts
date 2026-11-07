@@ -52,22 +52,6 @@ export const workspaceMembersTable = mysqlTable('workspace_members', {
   uniqueIndex('idx_workspace_member_unique').on(table.workspaceId, table.userId)
 ]);
 
-export const workspaceInvitationsTable = mysqlTable('workspace_invitations', {
-  id: varchar('id', { length: 36 }).primaryKey(),
-  workspaceId: varchar('workspace_id', { length: 36 }).notNull().references(() => workspacesTable.id, { onDelete: 'cascade' }),
-  email: varchar('email', { length: 255 }).notNull(),
-  role: varchar('role', { length: 20 }).default('editor').notNull(),
-  token: varchar('token', { length: 64 }).notNull(),
-  invitedById: varchar('invited_by_id', { length: 36 }).notNull().references(() => usersTable.id, { onDelete: 'cascade' }),
-  expiresAt: timestamp('expires_at').notNull(),
-  acceptedAt: timestamp('accepted_at'),
-  revokedAt: timestamp('revoked_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull()
-}, (table) => [
-  uniqueIndex('idx_invitation_token').on(table.token),
-  index('idx_invitations_workspace').on(table.workspaceId)
-]);
-
 export const foldersTable = mysqlTable('folders', {
   id: varchar('id', { length: 36 }).primaryKey(),
   workspaceId: varchar('workspace_id', { length: 36 }).notNull().references(() => workspacesTable.id, { onDelete: 'cascade' }),
@@ -174,5 +158,22 @@ export const dataRowsTable = mysqlTable('data_rows', {
 }, (table) => [
   index('idx_data_rows_table').on(table.tableId)
 ]);
+
+export const workspaceInvitationsTable = mysqlTable('workspace_invitations', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  workspaceId: varchar('workspace_id', { length: 36 }).notNull().references(() => workspacesTable.id, { onDelete: 'cascade' }),
+  email: varchar('email', { length: 255 }).notNull(),
+  role: varchar('role', { length: 20 }).default('editor').notNull(),
+  tokenHash: varchar('token_hash', { length: 128 }).notNull(),
+  invitedById: varchar('invited_by_id', { length: 36 }).notNull().references(() => usersTable.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at').notNull(),
+  acceptedAt: timestamp('accepted_at'),
+  revokedAt: timestamp('revoked_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+}, (table) => [
+  uniqueIndex('idx_invitation_token_hash').on(table.tokenHash),
+  index('idx_invitations_workspace').on(table.workspaceId)
+]);
+
 
 

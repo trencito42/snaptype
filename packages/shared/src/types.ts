@@ -46,7 +46,8 @@ export interface WorkspaceInvitation {
   workspaceId: string;
   email: string;
   role: WorkspaceRole;
-  token: string;
+  token?: string;
+  tokenHash?: string;
   invitedById: string;
   expiresAt: string;
   acceptedAt?: string | null;
@@ -127,6 +128,7 @@ export interface SyncResponse {
   folders: Folder[];
   deletedFolderIds: string[];
   preferences: UserPreferences;
+  tables?: DataTable[];
 }
 
 export interface DynamicFormField {

@@ -90,12 +90,9 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
       if (existingMember) {
         return reply.status(400).send({ error: 'User is already a member of this workspace' });
       }
-
-      const newMember = await repo.addWorkspaceMember(id, targetUser.id, assignedRole);
-      return reply.status(201).send({ member: newMember });
     }
 
-    // Target user does NOT exist yet: Create a secure pending invitation (do NOT create phantom user!)
+    // Issue secure pending invitation (ST-007)
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + INVITATION_DURATION_MS);
     const invitation = await repo.createWorkspaceInvitation(id, targetEmail, assignedRole, user.id, token, expiresAt);
@@ -153,7 +150,7 @@ export async function workspaceRoutes(app: FastifyInstance, repo: IRepository, a
       return reply.status(403).send({ error: 'Owner or admin access required to revoke invitations' });
     }
 
-    await repo.revokeWorkspaceInvitation(invitationId);
+    await repo.revokeWorkspaceInvitation(id, invitationId);
     return { success: true, message: 'Invitation revoked' };
   });
 

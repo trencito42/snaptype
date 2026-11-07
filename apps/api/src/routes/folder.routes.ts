@@ -66,6 +66,13 @@ export async function folderRoutes(app: FastifyInstance, repo: IRepository, auth
       return reply.status(403).send({ error: 'Editor access required to create folder' });
     }
 
+    if (parsed.data.parentId) {
+      const parentFolder = await repo.findFolderById(parsed.data.parentId);
+      if (!parentFolder || parentFolder.workspaceId !== workspaceId) {
+        return reply.status(400).send({ error: 'Parent folder must belong to the same workspace' });
+      }
+    }
+
     const folder = await repo.createFolder(workspaceId, parsed.data);
     return reply.status(201).send({ folder });
   });

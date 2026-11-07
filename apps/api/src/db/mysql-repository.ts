@@ -2,7 +2,7 @@ import { drizzle, MySql2Database } from 'drizzle-orm/mysql2';
 import mysql from 'mysql2/promise';
 import * as schema from './schema.js';
 import { IRepository, InMemoryRepository } from './repository.js';
-import { eq, and, sql, isNull, inArray, gt } from 'drizzle-orm';
+import { eq, and, sql, isNull, inArray, gt, or, like } from 'drizzle-orm';
 import { User, Workspace, WorkspaceMember, WorkspaceInvitation, Folder, Snippet, SnippetRevision, UserPreferences, WorkspaceRole, DEFAULT_PREFERENCES, DataTable, DataTableColumn, DataTableRow } from '@snaptype/shared';
 import crypto from 'node:crypto';
 const uuidv4 = () => crypto.randomUUID();
@@ -291,12 +291,13 @@ export class MySQLRepository implements IRepository {
   ): Promise<WorkspaceInvitation> {
     const id = uuidv4();
     const now = new Date();
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
     await this.db.insert(schema.workspaceInvitationsTable).values({
       id,
       workspaceId,
       email: email.toLowerCase().trim(),
       role,
-      token,
+      tokenHash,
       invitedById,
       expiresAt,
       createdAt: now
@@ -307,6 +308,7 @@ export class MySQLRepository implements IRepository {
       email: email.toLowerCase().trim(),
       role,
       token,
+      tokenHash,
       invitedById,
       expiresAt: expiresAt.toISOString(),
       acceptedAt: null,
@@ -316,7 +318,8 @@ export class MySQLRepository implements IRepository {
   }
 
   async findInvitationByToken(token: string): Promise<WorkspaceInvitation | null> {
-    const rows = await this.db.select().from(schema.workspaceInvitationsTable).where(eq(schema.workspaceInvitationsTable.token, token)).limit(1);
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+    const rows = await this.db.select().from(schema.workspaceInvitationsTable).where(eq(schema.workspaceInvitationsTable.tokenHash, tokenHash)).limit(1);
     if (!rows[0]) return null;
     const r = rows[0];
     return {
@@ -324,7 +327,7 @@ export class MySQLRepository implements IRepository {
       workspaceId: r.workspaceId,
       email: r.email,
       role: r.role as WorkspaceRole,
-      token: r.token,
+      tokenHash: r.tokenHash,
       invitedById: r.invitedById,
       expiresAt: r.expiresAt.toISOString(),
       acceptedAt: r.acceptedAt?.toISOString() || null,
@@ -347,7 +350,7 @@ export class MySQLRepository implements IRepository {
       workspaceId: r.workspaceId,
       email: r.email,
       role: r.role as WorkspaceRole,
-      token: r.token,
+      tokenHash: r.tokenHash,
       invitedById: r.invitedById,
       expiresAt: r.expiresAt.toISOString(),
       acceptedAt: r.acceptedAt?.toISOString() || null,
@@ -356,10 +359,10 @@ export class MySQLRepository implements IRepository {
     }));
   }
 
-  async revokeWorkspaceInvitation(id: string): Promise<void> {
+  async revokeWorkspaceInvitation(workspaceId: string, id: string): Promise<void> {
     await this.db.update(schema.workspaceInvitationsTable)
       .set({ revokedAt: new Date() })
-      .where(eq(schema.workspaceInvitationsTable.id, id));
+      .where(and(eq(schema.workspaceInvitationsTable.id, id), eq(schema.workspaceInvitationsTable.workspaceId, workspaceId)));
   }
 
   async acceptWorkspaceInvitation(token: string, userId: string): Promise<WorkspaceMember> {
@@ -553,29 +556,37 @@ export class MySQLRepository implements IRepository {
   }
 
   async findSnippets(workspaceId: string, options: { folderId?: string | null; search?: string; tag?: string; favoriteOnly?: boolean } = {}): Promise<Snippet[]> {
-    let query = this.db.select().from(schema.snippetsTable)
-      .where(and(eq(schema.snippetsTable.workspaceId, workspaceId), isNull(schema.snippetsTable.deletedAt)));
-
-    const rows = await query;
-    let filtered = rows;
+    const conditions = [
+      eq(schema.snippetsTable.workspaceId, workspaceId),
+      isNull(schema.snippetsTable.deletedAt)
+    ];
 
     if (options.folderId !== undefined) {
-      filtered = filtered.filter((r) => r.folderId === options.folderId);
+      if (options.folderId === null) {
+        conditions.push(isNull(schema.snippetsTable.folderId));
+      } else {
+        conditions.push(eq(schema.snippetsTable.folderId, options.folderId));
+      }
     }
     if (options.favoriteOnly) {
-      filtered = filtered.filter((r) => r.isFavorite);
-    }
-    if (options.tag) {
-      filtered = filtered.filter((r) => (r.tags as string[]).includes(options.tag!));
+      conditions.push(eq(schema.snippetsTable.isFavorite, true));
     }
     if (options.search) {
-      const q = options.search.toLowerCase().trim();
-      filtered = filtered.filter((r) =>
-        r.name.toLowerCase().includes(q) ||
-        r.shortcut.toLowerCase().includes(q) ||
-        r.plainContent.toLowerCase().includes(q) ||
-        (r.tags as string[]).some((t) => t.toLowerCase().includes(q))
+      const searchPattern = `%${options.search.trim()}%`;
+      conditions.push(
+        or(
+          like(schema.snippetsTable.name, searchPattern),
+          like(schema.snippetsTable.shortcut, searchPattern),
+          like(schema.snippetsTable.plainContent, searchPattern)
+        )!
       );
+    }
+
+    const rows = await this.db.select().from(schema.snippetsTable).where(and(...conditions));
+    let filtered = rows;
+
+    if (options.tag) {
+      filtered = filtered.filter((r) => (r.tags as string[]).includes(options.tag!));
     }
 
     return filtered.map((r) => ({

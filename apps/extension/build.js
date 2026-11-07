@@ -2,18 +2,34 @@ import esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const EXT_SRC = path.resolve(__dirname, 'src');
+const ROOT_DIST = path.resolve(__dirname, '../../dist');
 
 const args = process.argv.slice(2);
+const isProduction = args.includes('--production') || process.env.NODE_ENV === 'production';
 const targetArg = args.find((a) => a.startsWith('--target='));
 const targets = targetArg ? [targetArg.split('=')[1]] : ['chrome', 'firefox'];
 
 const apiUrlArg = args.find((a) => a.startsWith('--api-url='));
 const appUrlArg = args.find((a) => a.startsWith('--app-url='));
 
-const API_URL = (apiUrlArg ? apiUrlArg.split('=')[1] : null) || process.env.SNAPTYPE_API_URL || 'http://localhost:3000/api/v1';
-const APP_URL = (appUrlArg ? appUrlArg.split('=')[1] : null) || process.env.SNAPTYPE_APP_URL || 'http://localhost:5173';
+let API_URL = (apiUrlArg ? apiUrlArg.split('=')[1] : null) || process.env.SNAPTYPE_API_URL;
+let APP_URL = (appUrlArg ? appUrlArg.split('=')[1] : null) || process.env.SNAPTYPE_APP_URL;
 
-const ROOT_DIST = path.resolve('../../dist');
+if (isProduction) {
+  if (!API_URL) API_URL = 'https://api.snaptype.app/api/v1';
+  if (!APP_URL) APP_URL = 'https://snaptype.app';
+  if (API_URL.includes('localhost') || API_URL.includes('127.0.0.1')) {
+    throw new Error(`Production extension release cannot use loopback or localhost address: ${API_URL}`);
+  }
+} else {
+  if (!API_URL) API_URL = 'http://localhost:3000/api/v1';
+  if (!APP_URL) APP_URL = 'http://localhost:5173';
+}
 
 async function buildTarget(target) {
   const outDir = path.join(ROOT_DIST, target);
@@ -30,9 +46,8 @@ async function buildTarget(target) {
   };
 
   // 1. Build background script
-  // Note: Chrome MV3 supports module or service_worker, Firefox MV3 scripts
   await esbuild.build({
-    entryPoints: ['src/background/background.ts'],
+    entryPoints: [path.join(EXT_SRC, 'background/background.ts')],
     outfile: path.join(outDir, 'background.js'),
     bundle: true,
     minify: true,
@@ -44,7 +59,7 @@ async function buildTarget(target) {
 
   // 2. Build content script (IIFE)
   await esbuild.build({
-    entryPoints: ['src/content/content.ts'],
+    entryPoints: [path.join(EXT_SRC, 'content/content.ts')],
     outfile: path.join(outDir, 'content.js'),
     bundle: true,
     minify: true,
@@ -56,7 +71,7 @@ async function buildTarget(target) {
 
   // 3. Build popup script
   await esbuild.build({
-    entryPoints: ['src/popup/popup.ts'],
+    entryPoints: [path.join(EXT_SRC, 'popup/popup.ts')],
     outfile: path.join(outDir, 'popup.js'),
     bundle: true,
     minify: true,
@@ -67,9 +82,15 @@ async function buildTarget(target) {
   });
 
   // 4. Generate dynamic manifest with appropriate host permissions
-  const manifestFile = target === 'chrome' ? 'src/manifest.chrome.json' : 'src/manifest.firefox.json';
+  const manifestFile = path.join(EXT_SRC, target === 'chrome' ? 'manifest.chrome.json' : 'manifest.firefox.json');
   const manifestRaw = fs.readFileSync(manifestFile, 'utf-8');
   const manifest = JSON.parse(manifestRaw);
+
+  if (isProduction) {
+    manifest.host_permissions = (manifest.host_permissions || []).filter(
+      (h) => !h.includes('localhost') && !h.includes('127.0.0.1')
+    );
+  }
 
   // Extract base origin from API_URL (e.g. https://api.snaptype.com/*)
   try {
@@ -85,12 +106,12 @@ async function buildTarget(target) {
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   // 5. Copy CSS & HTML
-  fs.copyFileSync('src/content/content.css', path.join(outDir, 'content.css'));
-  fs.copyFileSync('src/popup/popup.html', path.join(outDir, 'popup.html'));
-  fs.copyFileSync('src/popup/popup.css', path.join(outDir, 'popup.css'));
+  fs.copyFileSync(path.join(EXT_SRC, 'content/content.css'), path.join(outDir, 'content.css'));
+  fs.copyFileSync(path.join(EXT_SRC, 'popup/popup.html'), path.join(outDir, 'popup.html'));
+  fs.copyFileSync(path.join(EXT_SRC, 'popup/popup.css'), path.join(outDir, 'popup.css'));
 
   // 6. Copy Icons
-  const iconSrcDir = path.resolve('src/icons');
+  const iconSrcDir = path.join(EXT_SRC, 'icons');
   if (fs.existsSync(iconSrcDir)) {
     for (const icon of ['icon16.png', 'icon48.png', 'icon128.png']) {
       const srcIcon = path.join(iconSrcDir, icon);
@@ -117,4 +138,3 @@ run().catch((err) => {
   console.error('Build failed:', err);
   process.exit(1);
 });
-

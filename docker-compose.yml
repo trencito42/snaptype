@@ -7,10 +7,10 @@ services:
     container_name: snaptype-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Error: MYSQL_ROOT_PASSWORD must be configured in .env}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-snaptype_db}
-      MYSQL_USER: ${MYSQL_USER:-snaptype_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Error: MYSQL_PASSWORD must be configured in .env}
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Error: MYSQL_ROOT_PASSWORD must be configured in .env}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-snaptype_db}"
+      MYSQL_USER: "${MYSQL_USER:-snaptype_user}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Error: MYSQL_PASSWORD must be configured in .env}"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./infrastructure/migrations/0001_initial_schema.sql:/docker-entrypoint-initdb.d/0001_initial_schema.sql:ro
@@ -37,19 +37,20 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOST: 0.0.0.0
-      DATABASE_URL: mysql://${MYSQL_USER:-snaptype_user}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-snaptype_db}
+      DATABASE_URL: "mysql://${MYSQL_USER:-snaptype_user}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-snaptype_db}"
       DB_DRIVER: mysql
-      JWT_SECRET: ${JWT_SECRET:?Error: JWT_SECRET must be configured in .env and at least 32 characters}
-      OTP_HMAC_SECRET: ${OTP_HMAC_SECRET:?Error: OTP_HMAC_SECRET must be configured in .env and at least 32 characters}
-      APP_URL: ${APP_URL:-http://localhost:8080}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-SnapType <auth@example.com>}
+      JWT_SECRET: "${JWT_SECRET:?Error: JWT_SECRET must be configured in .env and at least 32 characters}"
+      OTP_HMAC_SECRET: "${OTP_HMAC_SECRET:?Error: OTP_HMAC_SECRET must be configured in .env and at least 32 characters}"
+      APP_URL: "${APP_URL:-http://localhost:8080}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-SnapType <auth@example.com>}"
     networks:
       - snaptype_net
-    # Port 3000 bound only to localhost for local testing/healthchecks, proxied via Web Nginx container
+    # Port 3000 bound only to localhost for healthchecks / admin, proxied via Web Nginx container
     ports:
       - "127.0.0.1:3000:3000"
 

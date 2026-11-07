@@ -204,7 +204,7 @@ class ApiClient {
     return this.request<any>(`/export${qs}`);
   }
 
-  public async importSnippets(data: { snippets: any[]; format?: string; conflictStrategy?: string; workspaceId?: string }) {
+  public async importSnippets(data: { snippets: any[]; folders?: any[]; format?: string; conflictStrategy?: string; workspaceId?: string }) {
     return this.request<any>('/import', {
       method: 'POST',
       body: JSON.stringify(data)

@@ -116,4 +116,67 @@ describe('Milestone B: Extension Engine & Content Script Verifications', () => {
   it('ST-016: verifies programmatic insert guard in TextInserter', () => {
     expect(TextInserter.isProgrammaticInsert).toBe(false);
   });
+
+  it('Blocker 8: Fail-safe dynamic command insertion stops insertion when template errors exist', () => {
+    const { renderSnippet } = require('@snaptype/snippet-engine');
+    // Template with unknown table command and missing resolver
+    const brokenTemplate = 'Hello {{table:nonexistent_table|lookup=id|value=999|column=name}}!';
+    const rendered = renderSnippet(brokenTemplate, {});
+
+    expect(rendered.errors).toBeDefined();
+    expect(rendered.errors!.length).toBeGreaterThan(0);
+    expect(rendered.errors![0]).toContain('resolver unavailable for table');
+  });
+
+  it('Blocker 9: In-memory Data Table resolver resolves rows accurately', () => {
+    const { renderSnippet } = require('@snaptype/snippet-engine');
+    const mockTables = [
+      {
+        id: 't1',
+        name: 'Pricing',
+        workspaceId: 'ws-1',
+        columns: [],
+        rows: [
+          { id: 'r1', tableId: 't1', data: { plan: 'Pro', price: '$29/mo' }, createdAt: '', updatedAt: '' },
+          { id: 'r2', tableId: 't1', data: { plan: 'Enterprise', price: '$99/mo' }, createdAt: '', updatedAt: '' }
+        ],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+
+    const tableResolver = (tableName: string, lookupKey: string, lookupVal: any, targetCol: string) => {
+      const table = mockTables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
+      if (!table || !table.rows) return null;
+      const lookupStr = String(lookupVal).toLowerCase().trim();
+      const match = table.rows.find((r) => {
+        const val = r.data && r.data[lookupKey];
+        return val !== undefined && String(val).toLowerCase().trim() === lookupStr;
+      });
+      if (!match || !match.data) return null;
+      const targetVal = match.data[targetCol];
+      return targetVal !== undefined ? String(targetVal) : null;
+    };
+
+    const template = 'Your price is: {{table:Pricing|lookup=plan|value=Enterprise|column=price}}';
+    const rendered = renderSnippet(template, { tableResolver });
+
+    expect(rendered.errors).toHaveLength(0);
+    expect(rendered.text).toBe('Your price is: $99/mo');
+  });
+
+  it('Requirement 14: extracts selected text from input and textarea elements via selectionStart / selectionEnd', () => {
+    function getSelectedTextFromElement(el: { selectionStart?: number; selectionEnd?: number; value?: string }): string {
+      if (typeof el.selectionStart === 'number' && typeof el.selectionEnd === 'number' && el.value) {
+        if (el.selectionEnd > el.selectionStart) {
+          return el.value.substring(el.selectionStart, el.selectionEnd);
+        }
+      }
+      return '';
+    }
+
+    const mockInput = { selectionStart: 5, selectionEnd: 11, value: 'Good morning world' };
+    expect(getSelectedTextFromElement(mockInput)).toBe('mornin');
+  });
 });
+

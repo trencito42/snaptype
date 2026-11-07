@@ -1,4 +1,4 @@
-import { Snippet, UserPreferences, DEFAULT_PREFERENCES, SyncResponse } from '@snaptype/shared';
+import { Snippet, UserPreferences, DEFAULT_PREFERENCES, SyncResponse, DataTable } from '@snaptype/shared';
 import { BrowserApi } from '@snaptype/browser-compat';
 
 declare const __SNAPTYPE_API_URL__: string;
@@ -11,7 +11,9 @@ const PERIODIC_SYNC_ALARM = 'snaptype-periodic-sync';
 
 interface BackgroundState {
   token: string | null;
+  currentWorkspaceId: string | null;
   snippets: Snippet[];
+  tables: DataTable[];
   preferences: UserPreferences;
   currentRevision: number;
   lastSyncTime: number | null;
@@ -19,7 +21,9 @@ interface BackgroundState {
 
 const state: BackgroundState = {
   token: null,
+  currentWorkspaceId: null,
   snippets: [],
+  tables: [],
   preferences: { ...DEFAULT_PREFERENCES },
   currentRevision: 0,
   lastSyncTime: null
@@ -28,9 +32,10 @@ const state: BackgroundState = {
 // Initialize background lifecycle and alarm jobs (ST-009 & ST-018)
 async function init() {
   const authStore = BrowserApi.getAuthStorage();
-  const stored = await authStore.get(['snaptype_token']);
+  const stored = await authStore.get(['snaptype_token', 'snaptype_workspace']);
   if (stored && stored.snaptype_token) {
     state.token = stored.snaptype_token;
+    state.currentWorkspaceId = stored.snaptype_workspace || null;
     await syncWithServer();
   }
 
@@ -105,7 +110,13 @@ async function syncWithServer(): Promise<boolean> {
   if (!state.token) return false;
 
   try {
-    const res = await fetch(`${API_BASE}/sync?lastRevision=${state.currentRevision}`, {
+    const params = new URLSearchParams();
+    params.set('lastRevision', String(state.currentRevision));
+    if (state.currentWorkspaceId) {
+      params.set('workspaceId', state.currentWorkspaceId);
+    }
+
+    const res = await fetch(`${API_BASE}/sync?${params.toString()}`, {
       headers: {
         Authorization: `Bearer ${state.token}`,
         'Cache-Control': 'no-store'
@@ -118,6 +129,23 @@ async function syncWithServer(): Promise<boolean> {
       return false;
     }
 
+    if (res.status === 403) {
+      // Access revoked or removed from workspace (ST-006 / Blocker 6)
+      state.snippets = [];
+      state.tables = [];
+      state.currentRevision = 0;
+      state.lastSyncTime = Date.now();
+      const sessionStore = BrowserApi.getSessionStorage();
+      await sessionStore.set({
+        snaptype_cache: {
+          revision: 0,
+          count: 0
+        }
+      });
+      notifyTabsDataUpdated();
+      return false;
+    }
+
     if (!res.ok) return false;
 
     const data: SyncResponse = await res.json();
@@ -127,6 +155,9 @@ async function syncWithServer(): Promise<boolean> {
       updateContextMenu(data.preferences.assistantShortcut);
     }
     state.lastSyncTime = Date.now();
+    if (data.tables) {
+      state.tables = data.tables;
+    }
 
     // If first load or full sync:
     if (state.snippets.length === 0 || data.deletedSnippetIds.length > 0) {
@@ -182,12 +213,15 @@ function notifyTabsDataUpdated() {
 
 async function handleLogout() {
   state.token = null;
+  state.currentWorkspaceId = null;
   state.snippets = [];
+  state.tables = [];
   state.currentRevision = 0;
   state.lastSyncTime = null;
 
   const authStore = BrowserApi.getAuthStorage();
   await authStore.remove('snaptype_token');
+  await authStore.remove('snaptype_workspace');
 
   const sessionStore = BrowserApi.getSessionStorage();
   await sessionStore.clear();
@@ -207,11 +241,36 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
         }
         return {
           isAuthenticated: Boolean(state.token),
+          currentWorkspaceId: state.currentWorkspaceId,
           snippets: state.snippets,
+          tables: state.tables,
           preferences: state.preferences,
           currentRevision: state.currentRevision,
           lastSyncTime: state.lastSyncTime
         };
+      }
+
+      case 'SELECT_WORKSPACE': {
+        state.currentWorkspaceId = message.workspaceId || null;
+        state.snippets = [];
+        state.tables = [];
+        state.currentRevision = 0;
+
+        const authStore = BrowserApi.getAuthStorage();
+        if (state.currentWorkspaceId) {
+          await authStore.set({ snaptype_workspace: state.currentWorkspaceId });
+        } else {
+          await authStore.remove('snaptype_workspace');
+        }
+
+        const sessionStore = BrowserApi.getSessionStorage();
+        await sessionStore.set({
+          snaptype_cache: { revision: 0, count: 0 }
+        });
+
+        const ok = await syncWithServer();
+        notifyTabsDataUpdated();
+        return { success: ok, snippetsCount: state.snippets.length, workspaceId: state.currentWorkspaceId };
       }
 
       case 'SYNC_NOW': {
@@ -223,20 +282,24 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
         };
       }
 
-      // ST-010: Record snippet usage from content script insertion
+      // ST-010: Record snippet usage from content script insertion (Requirement 11)
       case 'RECORD_USAGE': {
         if (state.token && message.snippetId) {
-          fetch(`${API_BASE}/snippets/${message.snippetId}/usage`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${state.token}`,
-              'Content-Type': 'application/json'
-            }
-          }).catch((err) => {
+          try {
+            const res = await fetch(`${API_BASE}/snippets/${message.snippetId}/usage`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${state.token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            return { success: res.ok, status: res.status };
+          } catch (err: any) {
             console.debug('[SnapType] Record usage failed:', err);
-          });
+            return { success: false, error: err.message };
+          }
         }
-        return { success: true };
+        return { success: false, error: 'Missing token or snippetId' };
       }
 
       case 'AUTH_REQUEST_OTP': {

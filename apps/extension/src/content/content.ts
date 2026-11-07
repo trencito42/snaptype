@@ -1,6 +1,6 @@
 import { ReverseShortcutMatcher, renderSnippet, extractFormFields } from '@snaptype/snippet-engine';
 import { DomDetector, TextInserter, BrowserApi } from '@snaptype/browser-compat';
-import { Snippet, UserPreferences, DEFAULT_PREFERENCES, DynamicFormField } from '@snaptype/shared';
+import { Snippet, UserPreferences, DEFAULT_PREFERENCES, DynamicFormField, DataTable } from '@snaptype/shared';
 
 /**
  * Checks whether a snippet is allowed to expand on the current domain (ST-012)
@@ -52,6 +52,7 @@ function isMatchingHotkey(e: KeyboardEvent, shortcutStr?: string): boolean {
 export class ContentEngine {
   private matcher: ReverseShortcutMatcher = new ReverseShortcutMatcher();
   private snippets: Snippet[] = [];
+  private tables: DataTable[] = [];
   private preferences: UserPreferences = { ...DEFAULT_PREFERENCES };
   private keystrokeBuffer: string = '';
   private readonly MAX_BUFFER_LENGTH = 64;
@@ -86,6 +87,7 @@ export class ContentEngine {
       const response = await BrowserApi.sendMessage({ action: 'GET_DATA' });
       if (response && response.snippets) {
         this.snippets = response.snippets;
+        this.tables = response.tables || [];
         this.preferences = response.preferences || this.preferences;
         this.updateExclusionStatus();
         this.matcher.rebuild(this.snippets, this.preferences.caseSensitive);
@@ -118,23 +120,59 @@ export class ContentEngine {
     document.addEventListener('keydown', (e) => this.handleKeyDown(e), true);
     document.addEventListener('input', (e) => this.handleInput(e), true);
 
-    // Runtime messages from background (e.g. open assistant hotkey or context menu)
+    // Runtime messages from background (e.g. open assistant hotkey or popup insert)
     if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
-      chrome.runtime.onMessage.addListener((message) => {
+      chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: any) => {
         if (message.action === 'OPEN_ASSISTANT') {
           this.openAssistant();
+          sendResponse?.({ success: true });
         }
         if (message.action === 'REFRESH_DATA') {
           this.refreshData();
+          sendResponse?.({ success: true });
+        }
+        if (message.action === 'EXPAND_SNIPPET') {
+          const target = this.activeTarget || (DomDetector.getActiveElement() as HTMLElement);
+          if (!target || this.isExcluded) {
+            sendResponse?.({ success: false, error: 'No editable target or site is excluded' });
+            return;
+          }
+          const hostname = window.location.hostname || '';
+          if (!isSnippetAllowedOnCurrentSite(message.snippet, hostname)) {
+            sendResponse?.({ success: false, error: 'Snippet not allowed on this site' });
+            return;
+          }
+          const dynamicFields = extractFormFields(message.snippet.plainContent);
+          if (dynamicFields.length > 0) {
+            this.openDynamicForm(target, message.snippet, dynamicFields, 0);
+            sendResponse?.({ success: true, openedForm: true });
+          } else {
+            const rendered = this.renderSnippetWithContext(message.snippet.plainContent, {}, target);
+            if (rendered.errors && rendered.errors.length > 0) {
+              this.showErrorTooltip(target, rendered.errors.join('; '));
+              sendResponse?.({ success: false, error: rendered.errors.join('; ') });
+              return;
+            }
+            const inserted = TextInserter.insert(target, {
+              matchLength: 0,
+              replacementText: rendered.text,
+              cursorOffset: rendered.cursorOffset
+            });
+            BrowserApi.sendMessage({ action: 'RECORD_USAGE', snippetId: message.snippet.id });
+            sendResponse?.({ success: inserted });
+          }
         }
         if (message.action === 'INSERT_TEXT') {
           const target = this.activeTarget || (DomDetector.getActiveElement() as HTMLElement);
           if (target && !this.isExcluded) {
-            TextInserter.insert(target, {
+            const inserted = TextInserter.insert(target, {
               matchLength: 0,
               replacementText: message.text,
               cursorOffset: message.cursorOffset
             });
+            sendResponse?.({ success: inserted });
+          } else {
+            sendResponse?.({ success: false, error: 'Target not editable or site excluded' });
           }
         }
       });
@@ -209,7 +247,11 @@ export class ContentEngine {
       this.openDynamicForm(target, snippet, dynamicFields, match.matchLength);
     } else {
       // Plain/static replacement: insert immediately
-      const rendered = this.renderSnippetWithContext(snippet.plainContent);
+      const rendered = this.renderSnippetWithContext(snippet.plainContent, {}, target);
+      if (rendered.errors && rendered.errors.length > 0) {
+        this.showErrorTooltip(target, rendered.errors.join('; '));
+        return;
+      }
       TextInserter.insert(target, {
         matchLength: match.matchLength,
         replacementText: rendered.text,
@@ -221,17 +263,90 @@ export class ContentEngine {
     }
   }
 
-  private renderSnippetWithContext(template: string, variables: Record<string, any> = {}) {
+  private getSelectedText(target?: HTMLElement | null): string {
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      const start = target.selectionStart ?? 0;
+      const end = target.selectionEnd ?? 0;
+      if (end > start) {
+        return target.value.substring(start, end);
+      }
+    }
+    try {
+      const sel = window.getSelection();
+      if (sel && sel.toString()) {
+        return sel.toString();
+      }
+    } catch {
+      // ignore selection errors
+    }
+    return '';
+  }
+
+  private showErrorTooltip(target: HTMLElement, errorMessage: string) {
+    const existing = document.querySelector('.snaptype-error-tooltip');
+    if (existing) existing.remove();
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'snaptype-error-tooltip';
+    tooltip.textContent = `SnapType: ${errorMessage}`;
+    tooltip.style.position = 'absolute';
+    tooltip.style.backgroundColor = '#1f2937';
+    tooltip.style.color = '#f87171';
+    tooltip.style.padding = '6px 10px';
+    tooltip.style.borderRadius = '6px';
+    tooltip.style.fontSize = '12px';
+    tooltip.style.zIndex = '2147483647';
+    tooltip.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+    tooltip.style.pointerEvents = 'none';
+    tooltip.style.maxWidth = '320px';
+    tooltip.style.whiteSpace = 'normal';
+    tooltip.style.transition = 'opacity 0.3s ease';
+
+    try {
+      const rect = target.getBoundingClientRect();
+      const top = window.scrollY + rect.bottom + 4;
+      const left = window.scrollX + Math.max(10, rect.left);
+      tooltip.style.top = `${top}px`;
+      tooltip.style.left = `${left}px`;
+    } catch {
+      tooltip.style.top = '20px';
+      tooltip.style.right = '20px';
+    }
+
+    document.body.appendChild(tooltip);
+
+    setTimeout(() => {
+      tooltip.style.opacity = '0';
+      setTimeout(() => tooltip.remove(), 300);
+    }, 4000);
+  }
+
+  private renderSnippetWithContext(template: string, variables: Record<string, any> = {}, target?: HTMLElement | null) {
+    const currentHost = window.location.hostname || '';
     return renderSnippet(template, {
       variables,
       siteContext: {
         url: window.location.href,
-        hostname: window.location.hostname
+        hostname: currentHost
       },
-      selectedText: window.getSelection()?.toString() || '',
+      selectedText: this.getSelectedText(target || this.activeTarget),
       snippetResolver: (shortcut: string) => {
         const found = this.snippets.find((s) => s.shortcut.toLowerCase() === shortcut.toLowerCase());
-        return found ? found.plainContent : null;
+        if (!found) return null;
+        if (!isSnippetAllowedOnCurrentSite(found, currentHost)) return null;
+        return found.plainContent;
+      },
+      tableResolver: (tableName: string, lookupKey: string, lookupVal: any, targetCol: string) => {
+        const table = this.tables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
+        if (!table || !table.rows) return null;
+        const lookupStr = String(lookupVal).toLowerCase().trim();
+        const match = table.rows.find((r) => {
+          const rowVal = r.data && r.data[lookupKey];
+          return rowVal !== undefined && String(rowVal).toLowerCase().trim() === lookupStr;
+        });
+        if (!match || !match.data) return null;
+        const targetVal = match.data[targetCol];
+        return targetVal !== undefined ? String(targetVal) : null;
       }
     });
   }
@@ -241,6 +356,20 @@ export class ContentEngine {
    */
   private openDynamicForm(target: HTMLElement, snippet: Snippet, fields: DynamicFormField[], matchLength: number) {
     if (this.formOverlay) this.formOverlay.remove();
+
+    let savedRange: Range | null = null;
+    let savedSelectionStart = -1;
+    let savedSelectionEnd = -1;
+    try {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        savedRange = sel.getRangeAt(0).cloneRange();
+      }
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        savedSelectionStart = target.selectionStart ?? -1;
+        savedSelectionEnd = target.selectionEnd ?? -1;
+      }
+    } catch {}
 
     const overlay = document.createElement('div');
     overlay.className = 'snaptype-overlay';
@@ -351,10 +480,31 @@ export class ContentEngine {
     const actions = document.createElement('div');
     actions.className = 'snaptype-modal-actions';
 
+    const cancelAction = () => {
+      overlay.remove();
+      this.formOverlay = null;
+      target.focus();
+      try {
+        if (savedRange && window.getSelection) {
+          const sel = window.getSelection();
+          if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(savedRange);
+          }
+        } else if (
+          (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
+          savedSelectionStart >= 0 &&
+          savedSelectionEnd >= 0
+        ) {
+          target.setSelectionRange(savedSelectionStart, savedSelectionEnd);
+        }
+      } catch {}
+    };
+
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'snaptype-btn snaptype-btn-secondary';
     cancelBtn.textContent = 'Cancel (Esc)';
-    cancelBtn.onclick = () => overlay.remove();
+    cancelBtn.onclick = cancelAction;
 
     const submitBtn = document.createElement('button');
     submitBtn.className = 'snaptype-btn snaptype-btn-primary';
@@ -392,8 +542,31 @@ export class ContentEngine {
       if (hasError) return;
 
       overlay.remove();
+      this.formOverlay = null;
 
-      const rendered = this.renderSnippetWithContext(snippet.plainContent, vars);
+      target.focus();
+      try {
+        if (savedRange && window.getSelection) {
+          const sel = window.getSelection();
+          if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(savedRange);
+          }
+        } else if (
+          (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
+          savedSelectionStart >= 0 &&
+          savedSelectionEnd >= 0
+        ) {
+          target.setSelectionRange(savedSelectionStart, savedSelectionEnd);
+        }
+      } catch {}
+
+      const rendered = this.renderSnippetWithContext(snippet.plainContent, vars, target);
+      if (rendered.errors && rendered.errors.length > 0) {
+        this.showErrorTooltip(target, rendered.errors.join('; '));
+        return;
+      }
+
       TextInserter.insert(target, {
         matchLength,
         replacementText: rendered.text,
@@ -419,8 +592,7 @@ export class ContentEngine {
     // Keyboard handlers
     modal.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        overlay.remove();
-        target.focus();
+        cancelAction();
       } else if (e.key === 'Enter' && !e.shiftKey && !(e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
         applyValues();
@@ -574,7 +746,11 @@ export class ContentEngine {
       if (dynamicFields.length > 0) {
         this.openDynamicForm(target, snip, dynamicFields, 0);
       } else {
-        const rendered = this.renderSnippetWithContext(snip.plainContent);
+        const rendered = this.renderSnippetWithContext(snip.plainContent, {}, target);
+        if (rendered.errors && rendered.errors.length > 0) {
+          this.showErrorTooltip(target, rendered.errors.join('; '));
+          return;
+        }
         TextInserter.insert(target, {
           matchLength: 0,
           replacementText: rendered.text,
