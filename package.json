@@ -11,6 +11,7 @@
     "build:packages": "npm run build -w packages/shared -w packages/snippet-engine -w packages/browser-compat",
     "build:api": "npm run build -w apps/api",
     "build:web": "npm run build -w apps/web",
+    "start:web:wings": "node apps/web/serve.mjs",
     "build:extension": "npm run build -w apps/extension",
     "build:extension:prod": "npm run build:prod -w apps/extension",
     "build:extension:chrome": "npm run build:chrome -w apps/extension",

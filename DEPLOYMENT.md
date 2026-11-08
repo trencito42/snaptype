@@ -1,6 +1,8 @@
 # SnapType — Production Deployment Guide
 
-This guide covers deploying the SnapType platform to a standard Linux VPS (Ubuntu 22.04 / 24.04 LTS), or spinning it up instantly via Docker Compose.
+**Blipmade / Wings hosting:** see [`docs/deployment/BLIPMADE.md`](docs/deployment/BLIPMADE.md) (three instances + Git Deploy). That is the production path for `snaptype.org`.
+
+This guide covers deploying the SnapType platform to a standard Linux VPS (Ubuntu 22.04 / 24.04 LTS), or spinning it up instantly via Docker Compose (local verification and self-hosting).
 
 ---
 

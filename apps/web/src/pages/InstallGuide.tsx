@@ -15,14 +15,29 @@ export const InstallGuide: React.FC = () => (
       Install the SnapType extension
     </h1>
     <p style={{ color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.6 }}>
-      SnapType works in Chrome-based browsers (Chrome, Edge, Brave) and in Firefox.
+      Production site: <a href="https://snaptype.org">snaptype.org</a>. SnapType works in Firefox and in Chrome-based browsers
+      (Chrome, Edge, Brave). Firefox is the first target for store publication; Chrome follows.
     </p>
 
     <div style={{ ...card, background: 'var(--surface-subtle)' }} role="note">
-      <strong>Availability:</strong> the extension is not published on the Chrome Web Store or Firefox Add-ons yet, so there
-      is no store button. Until it is, install it from the release packages (<code>chrome-extension.zip</code>,{' '}
-      <code>firefox-extension.zip</code>) provided by whoever runs your SnapType server.
+      <strong>Store status:</strong> the extension is not published on Firefox Add-ons or the Chrome Web Store yet — there is no
+      store install button. Until publication is authorized, install from signed or release packages (
+      <code>firefox-extension.zip</code>, <code>chrome-extension.zip</code>) built for{' '}
+      <code>https://api.snaptype.org/api/v1</code>.
     </div>
+
+    <section style={card} aria-labelledby="ff-h">
+      <h2 id="ff-h" style={{ fontSize: 18, marginBottom: 10 }}>Firefox (first store target)</h2>
+      <ol style={steps}>
+        <li>Open <code>about:debugging#/runtime/this-firefox</code>.</li>
+        <li>Choose <strong>Load Temporary Add-on…</strong> and select <code>firefox-extension.zip</code> (or its <code>manifest.json</code>).</li>
+        <li>Open SnapType from the toolbar and sign in.</li>
+      </ol>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+        Firefox removes temporary add-ons when it restarts. A permanent install needs a signed package from Mozilla Add-ons
+        (add-on ID <code>extension@snaptype.app</code>).
+      </p>
+    </section>
 
     <section style={card} aria-labelledby="chrome-h">
       <h2 id="chrome-h" style={{ fontSize: 18, marginBottom: 10 }}>Chrome, Edge, Brave</h2>
@@ -32,18 +47,6 @@ export const InstallGuide: React.FC = () => (
         <li>Choose <strong>Load unpacked</strong> and select the unzipped folder.</li>
         <li>Pin SnapType from the puzzle-piece menu, open it and sign in with your email code.</li>
       </ol>
-    </section>
-
-    <section style={card} aria-labelledby="ff-h">
-      <h2 id="ff-h" style={{ fontSize: 18, marginBottom: 10 }}>Firefox</h2>
-      <ol style={steps}>
-        <li>Open <code>about:debugging#/runtime/this-firefox</code>.</li>
-        <li>Choose <strong>Load Temporary Add-on…</strong> and select <code>firefox-extension.zip</code> (or its <code>manifest.json</code>).</li>
-        <li>Open SnapType from the toolbar and sign in.</li>
-      </ol>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
-        Firefox removes temporary add-ons when it restarts. A permanent install needs a signed package from Mozilla Add-ons.
-      </p>
     </section>
 
     <section style={card} aria-labelledby="try-h">

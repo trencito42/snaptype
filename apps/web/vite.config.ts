@@ -20,8 +20,19 @@ function preloadCriticalFonts(): Plugin {
   };
 }
 
+const blipmadeTarget = process.env.VITE_SNAPTYPE_DEPLOY_TARGET === 'blipmade';
+const apiBase = process.env.VITE_API_BASE?.trim();
+if (blipmadeTarget && !apiBase) {
+  throw new Error(
+    'Blipmade web builds require VITE_API_BASE (e.g. https://api.snaptype.org/api/v1) in the release environment before npm run build:web.'
+  );
+}
+
 export default defineConfig({
   plugins: [react(), preloadCriticalFonts()],
+  define: {
+    __SNAPTYPE_API_BASE__: JSON.stringify(apiBase || '/api/v1'),
+  },
   server: {
     port: 5173,
     proxy: {

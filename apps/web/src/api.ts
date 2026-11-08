@@ -1,6 +1,8 @@
 import { User, Workspace, Folder, Snippet, SnippetRevision, UserPreferences, SyncResponse } from '@snaptype/shared';
 
-const API_BASE = '/api/v1';
+declare const __SNAPTYPE_API_BASE__: string;
+
+const API_BASE = __SNAPTYPE_API_BASE__;
 
 class ApiClient {
   private token: string | null = null;

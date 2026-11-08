@@ -22,6 +22,7 @@ export const Footer: React.FC<{ onNavigate: (view: string) => void }> = ({ onNav
         <h2>Legal &amp; support</h2>
         <button onClick={() => onNavigate('privacy')}>Privacy</button>
         <button onClick={() => onNavigate('terms')}>Terms</button>
+        <a href="mailto:support@snaptype.org">support@snaptype.org</a>
         <a href="https://github.com/trencito42/snaptype/issues" rel="noopener noreferrer">Report an issue</a>
       </nav>
     </div>

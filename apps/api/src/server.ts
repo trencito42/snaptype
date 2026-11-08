@@ -15,6 +15,7 @@ import { transferRoutes } from './routes/transfer.routes.js';
 import { tableRoutes } from './routes/table.routes.js';
 import { emailService } from './services/email.service.js';
 import { redactUrl } from './log-redact.js';
+import { resolveListenPort } from '@snaptype/shared';
 
 export async function createServer(): Promise<FastifyInstance> {
   const logSerializers = {
@@ -130,7 +131,13 @@ export async function createServer(): Promise<FastifyInstance> {
 }
 
 if (process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js')) {
-  const port = parseInt(process.env.PORT || '3000', 10);
+  let port: number;
+  try {
+    port = resolveListenPort();
+  } catch (err) {
+    console.error('[Fatal]', err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
   const host = process.env.HOST || '0.0.0.0';
 
   createServer().then((server) => {
