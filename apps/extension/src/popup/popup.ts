@@ -22,6 +22,7 @@ const btnSyncNow = document.getElementById('btn-sync-now')!;
 const btnOpenDash = document.getElementById('btn-open-dash')!;
 const btnLogout = document.getElementById('btn-logout')!;
 const btnBackEmail = document.getElementById('btn-back-email')!;
+const otpSubtitle = otpStep.querySelector('.auth-subtitle');
 
 let currentSnippets: Snippet[] = [];
 let pendingEmail = '';
@@ -30,18 +31,32 @@ async function init() {
   const data = await BrowserApi.sendMessage({ action: 'GET_DATA' });
 
   if (!data || !data.isAuthenticated) {
-    showAuthView();
+    const resumeEmail = typeof data?.pendingOtpEmail === 'string' ? data.pendingOtpEmail : '';
+    showAuthView(resumeEmail ? 'otp' : 'email', resumeEmail);
   } else {
     showMainView(data);
   }
 }
 
-function showAuthView() {
+function showAuthView(step: 'email' | 'otp' = 'email', emailForOtp = '') {
   authView.style.display = 'block';
   mainView.style.display = 'none';
-  emailStep.style.display = 'block';
-  otpStep.style.display = 'none';
   headerStatus.textContent = 'Not signed in';
+  if (step === 'otp' && emailForOtp) {
+    pendingEmail = emailForOtp;
+    authEmail.value = emailForOtp;
+    emailStep.style.display = 'none';
+    otpStep.style.display = 'block';
+    if (otpSubtitle) {
+      otpSubtitle.textContent = `We sent a 6-digit code to ${emailForOtp}.`;
+    }
+    authOtp.value = '';
+    authError.textContent = '';
+  } else {
+    emailStep.style.display = 'block';
+    otpStep.style.display = 'none';
+    pendingEmail = '';
+  }
 }
 
 function showMainView(data: any) {
@@ -247,6 +262,9 @@ emailForm?.addEventListener('submit', async (e) => {
   pendingEmail = email;
   const res = await BrowserApi.sendMessage({ action: 'AUTH_REQUEST_OTP', email });
   if (res && res.success) {
+    if (otpSubtitle) {
+      otpSubtitle.textContent = `We sent a 6-digit code to ${email}.`;
+    }
     emailStep.style.display = 'none';
     otpStep.style.display = 'block';
     authOtp.focus();
@@ -271,9 +289,14 @@ otpForm?.addEventListener('submit', async (e) => {
   }
 });
 
-btnBackEmail?.addEventListener('click', () => {
+btnBackEmail?.addEventListener('click', async () => {
+  await BrowserApi.sendMessage({ action: 'CLEAR_PENDING_OTP' });
+  pendingEmail = '';
   otpStep.style.display = 'none';
   emailStep.style.display = 'block';
+  if (otpSubtitle) {
+    otpSubtitle.textContent = 'We sent a 6-digit code to your email.';
+  }
   authError.textContent = '';
 });
 
@@ -294,7 +317,7 @@ btnOpenDash?.addEventListener('click', () => {
 // Logout
 btnLogout?.addEventListener('click', async () => {
   await BrowserApi.sendMessage({ action: 'LOGOUT' });
-  showAuthView();
+  showAuthView('email');
 });
 
 init();

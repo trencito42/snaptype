@@ -12,6 +12,37 @@ const API_BASE = typeof __SNAPTYPE_API_URL__ !== 'undefined'
 
 const PERIODIC_SYNC_ALARM = 'snaptype-periodic-sync';
 
+/** OTP login: popup closes when focus leaves; keep email on disk until verify or expiry (matches API TTL). */
+const PENDING_OTP_EMAIL_KEY = 'snaptype_pending_otp_email';
+const PENDING_OTP_AT_KEY = 'snaptype_pending_otp_at';
+const PENDING_OTP_TTL_MS = 10 * 60 * 1000;
+
+async function setPendingOtpEmail(email: string): Promise<void> {
+  const authStore = BrowserApi.getAuthStorage();
+  await authStore.set({
+    [PENDING_OTP_EMAIL_KEY]: email.trim().toLowerCase(),
+    [PENDING_OTP_AT_KEY]: Date.now()
+  });
+}
+
+async function getPendingOtpEmail(): Promise<string | null> {
+  const authStore = BrowserApi.getAuthStorage();
+  const data = await authStore.get([PENDING_OTP_EMAIL_KEY, PENDING_OTP_AT_KEY]);
+  const email = data[PENDING_OTP_EMAIL_KEY];
+  const at = data[PENDING_OTP_AT_KEY];
+  if (typeof email !== 'string' || !email) return null;
+  if (typeof at !== 'number' || Date.now() - at > PENDING_OTP_TTL_MS) {
+    await clearPendingOtpEmail();
+    return null;
+  }
+  return email;
+}
+
+async function clearPendingOtpEmail(): Promise<void> {
+  const authStore = BrowserApi.getAuthStorage();
+  await authStore.remove([PENDING_OTP_EMAIL_KEY, PENDING_OTP_AT_KEY]);
+}
+
 interface BackgroundState {
   token: string | null;
   currentWorkspaceId: string | null;
@@ -314,6 +345,7 @@ async function handleLogout() {
   const authStore = BrowserApi.getAuthStorage();
   await authStore.remove('snaptype_token');
   await authStore.remove('snaptype_workspace');
+  await clearPendingOtpEmail();
 
   const sessionStore = BrowserApi.getSessionStorage();
   await sessionStore.clear();
@@ -336,8 +368,10 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
         if (state.token && state.snippets.length === 0) {
           await syncWithServer();
         }
+        const pendingOtpEmail = state.token ? null : await getPendingOtpEmail();
         return {
           isAuthenticated: Boolean(state.token),
+          pendingOtpEmail,
           currentWorkspaceId: state.currentWorkspaceId,
           workspaces: state.workspaces,
           snippets: state.snippets,
@@ -437,6 +471,7 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'Failed to request OTP');
+          await setPendingOtpEmail(message.email);
           return { success: true, message: data.message };
         } catch (err: any) {
           return { success: false, error: err.message };
@@ -457,12 +492,18 @@ BrowserApi.api.runtime.onMessage.addListener((message: any, _sender, sendRespons
           const authStore = BrowserApi.getAuthStorage();
           await authStore.set({ snaptype_token: data.token });
 
+          await clearPendingOtpEmail();
           await fetchWorkspaces();
           await syncWithServer();
           return { success: true, user: data.user, workspaces: state.workspaces };
         } catch (err: any) {
           return { success: false, error: err.message };
         }
+      }
+
+      case 'CLEAR_PENDING_OTP': {
+        await clearPendingOtpEmail();
+        return { success: true };
       }
 
       case 'LOGOUT': {
