@@ -121,6 +121,24 @@ async function buildTarget(target) {
   fs.copyFileSync(path.join(EXT_SRC, 'popup/popup.html'), path.join(outDir, 'popup.html'));
   fs.copyFileSync(path.join(EXT_SRC, 'popup/popup.css'), path.join(outDir, 'popup.css'));
 
+  const fontsDir = path.join(outDir, 'fonts');
+  fs.mkdirSync(fontsDir, { recursive: true });
+  const monoRoot = path.resolve(__dirname, '../..');
+  const interFont = path.join(monoRoot, 'node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2');
+  const clarityFont = path.join(monoRoot, 'node_modules/@fontsource/clarity-city/files/clarity-city-latin-800-normal.woff2');
+  const logoSvg = path.join(monoRoot, 'apps/web/src/assets/logo.svg');
+  if (!fs.existsSync(interFont) || !fs.existsSync(clarityFont)) {
+    throw new Error('Popup fonts missing. From repo root run: npm install (needs @fontsource-variable/inter and @fontsource/clarity-city).');
+  }
+  fs.copyFileSync(interFont, path.join(fontsDir, 'inter.woff2'));
+  fs.copyFileSync(clarityFont, path.join(fontsDir, 'clarity-display.woff2'));
+  const assetsDir = path.join(outDir, 'assets');
+  fs.mkdirSync(assetsDir, { recursive: true });
+  if (!fs.existsSync(logoSvg)) {
+    throw new Error(`Missing approved logo at ${logoSvg}`);
+  }
+  fs.copyFileSync(logoSvg, path.join(assetsDir, 'logo.svg'));
+
   // 6. Copy Icons
   const iconSrcDir = path.join(EXT_SRC, 'icons');
   if (fs.existsSync(iconSrcDir)) {

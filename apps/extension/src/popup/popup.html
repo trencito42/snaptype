@@ -12,25 +12,27 @@
     <!-- Header -->
     <header class="popup-header">
       <div class="logo">
-        <img class="logo-img" src="icons/icon48.png" width="24" height="24" alt="">
-        <span class="logo-text">snap<b>type</b></span>
+        <img class="logo-img" src="assets/logo.svg" width="28" height="28" alt="">
+        <span class="wordmark">snap<b>type</b></span>
       </div>
       <div id="header-status" class="sync-indicator"></div>
     </header>
 
     <!-- State A: Unauthenticated Flow -->
     <div id="auth-view" class="view" style="display: none;">
-      <div id="email-step">
-        <h2 class="auth-title">Welcome</h2>
-        <p class="auth-subtitle">Your snippets, everywhere.</p>
+      <div id="email-step" class="auth-card">
+        <span class="auth-kicker">Sign in</span>
+        <h2 class="auth-title">Welcome back</h2>
+        <p class="auth-subtitle">Your snippets, synced with the dashboard.</p>
         <form id="email-form">
           <input type="email" id="auth-email" class="popup-input" placeholder="name@company.com" required />
           <button type="submit" id="btn-request-otp" class="popup-btn popup-btn-primary">Continue</button>
         </form>
       </div>
 
-      <div id="otp-step" style="display: none;">
-        <h2 class="auth-title">Enter Code</h2>
+      <div id="otp-step" class="auth-card" style="display: none;">
+        <span class="auth-kicker">Verification</span>
+        <h2 class="auth-title">Enter code</h2>
         <p class="auth-subtitle">We sent a 6-digit code to your email.</p>
         <form id="otp-form">
           <input type="text" id="auth-otp" class="popup-input popup-input-mono" placeholder="123456" maxlength="6" required />

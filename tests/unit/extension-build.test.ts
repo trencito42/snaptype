@@ -29,6 +29,9 @@ describe('extension build (executes the real build script)', () => {
       const m = manifest(out, t);
       expect(m.version).toBe(extVersion);
       expect(m.host_permissions).toContain('http://localhost:3000/*');
+      expect(fs.existsSync(path.join(out, t, 'fonts/inter.woff2'))).toBe(true);
+      expect(fs.existsSync(path.join(out, t, 'assets/logo.svg'))).toBe(true);
+      expect(fs.readFileSync(path.join(out, t, 'popup.css'), 'utf-8')).toContain('Clarity City');
     }
   });
 
