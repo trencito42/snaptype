@@ -1,0 +1,74 @@
+/* Shared with apps/web/src/index.css — extension popup + in-page overlays */
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('fonts/inter.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Clarity City';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url('fonts/clarity-display.woff2') format('woff2');
+}
+
+:root,
+:where(.snaptype-overlay, .snaptype-assistant-overlay, .snaptype-assistant-panel, .snaptype-modal, .popup-container) {
+  --background: #f4f5f7;
+  --surface: #ffffff;
+  --surface-subtle: #f1f2f4;
+  --surface-hover: #e9ebee;
+  --ink: #131412;
+  --text-secondary: #565a63;
+  --text-muted: #5f636c;
+  --border: #e3e5e9;
+  --border-strong: #c9ccd2;
+  --accent: #85f66a;
+  --accent-hover: #74e859;
+  --accent-ink: #10200d;
+  --accent-light: #e8fde2;
+  --accent-deep: #1f7a10;
+  --danger: #e53935;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+  --shadow-soft: 0 1px 2px rgba(19, 20, 18, .04), 0 8px 24px rgba(19, 20, 18, .06);
+  --font-sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Clarity City', var(--font-sans);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.snaptype-brand,
+.popup-header .logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.snaptype-brand img,
+.logo-img {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+
+.snaptype-wordmark,
+.wordmark {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+}
+
+.snaptype-wordmark b,
+.wordmark b {
+  font-weight: 800;
+  color: var(--accent-deep);
+}

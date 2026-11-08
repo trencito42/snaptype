@@ -33,6 +33,7 @@
         "content.js"
       ],
       "css": [
+        "design-tokens.css",
         "content.css"
       ],
       "run_at": "document_idle"

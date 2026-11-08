@@ -117,6 +117,7 @@ async function buildTarget(target) {
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   // 5. Copy CSS & HTML
+  fs.copyFileSync(path.join(EXT_SRC, 'styles/design-tokens.css'), path.join(outDir, 'design-tokens.css'));
   fs.copyFileSync(path.join(EXT_SRC, 'content/content.css'), path.join(outDir, 'content.css'));
   fs.copyFileSync(path.join(EXT_SRC, 'popup/popup.html'), path.join(outDir, 'popup.html'));
   fs.copyFileSync(path.join(EXT_SRC, 'popup/popup.css'), path.join(outDir, 'popup.css'));

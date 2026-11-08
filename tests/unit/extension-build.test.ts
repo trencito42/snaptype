@@ -31,7 +31,9 @@ describe('extension build (executes the real build script)', () => {
       expect(m.host_permissions).toContain('http://localhost:3000/*');
       expect(fs.existsSync(path.join(out, t, 'fonts/inter.woff2'))).toBe(true);
       expect(fs.existsSync(path.join(out, t, 'assets/logo.svg'))).toBe(true);
-      expect(fs.readFileSync(path.join(out, t, 'popup.css'), 'utf-8')).toContain('Clarity City');
+      expect(fs.existsSync(path.join(out, t, 'design-tokens.css'))).toBe(true);
+      expect(fs.readFileSync(path.join(out, t, 'design-tokens.css'), 'utf-8')).toContain('Clarity City');
+      expect(manifest(out, t).content_scripts?.[0]?.css).toEqual(['design-tokens.css', 'content.css']);
     }
   });
 

@@ -5,6 +5,27 @@ import { Snippet, UserPreferences, DEFAULT_PREFERENCES, DynamicFormField, DataTa
 
 declare const __SNAPTYPE_APP_URL__: string;
 
+function snaptypeAsset(relativePath: string): string {
+  return chrome.runtime.getURL(relativePath);
+}
+
+/** Same brand row as snaptype.org header / extension popup */
+function createSnaptypeBrand(): HTMLElement {
+  const brand = document.createElement('div');
+  brand.className = 'snaptype-brand';
+  const img = document.createElement('img');
+  img.src = snaptypeAsset('assets/logo.svg');
+  img.width = 24;
+  img.height = 24;
+  img.alt = '';
+  img.decoding = 'async';
+  const wordmark = document.createElement('span');
+  wordmark.className = 'snaptype-wordmark';
+  wordmark.innerHTML = 'snap<b>type</b>';
+  brand.append(img, wordmark);
+  return brand;
+}
+
 /**
  * Checks whether a snippet is allowed to expand on the current domain (ST-012)
  */
@@ -419,13 +440,19 @@ export class ContentEngine {
 
     const header = document.createElement('div');
     header.className = 'snaptype-modal-header';
-    const titleBold = document.createElement('strong');
-    titleBold.textContent = snippet.name;
+    const brandRow = document.createElement('div');
+    brandRow.className = 'snaptype-modal-top';
+    brandRow.appendChild(createSnaptypeBrand());
+    const titleRow = document.createElement('div');
+    titleRow.className = 'snaptype-modal-top';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'snaptype-modal-title';
+    titleEl.textContent = snippet.name;
     const badgeSpan = document.createElement('span');
     badgeSpan.className = 'snaptype-badge';
     badgeSpan.textContent = snippet.shortcut;
-    header.appendChild(titleBold);
-    header.appendChild(badgeSpan);
+    titleRow.append(titleEl, badgeSpan);
+    header.append(brandRow, titleRow);
     modal.appendChild(header);
 
     const form = document.createElement('div');
@@ -444,8 +471,9 @@ export class ContentEngine {
       label.textContent = field.label || field.name;
       if (field.required) {
         const reqSpan = document.createElement('span');
-        reqSpan.style.color = '#e53e3e';
+        reqSpan.className = 'snaptype-form-error';
         reqSpan.textContent = ' *';
+        reqSpan.style.display = 'inline';
         label.appendChild(reqSpan);
       }
       row.appendChild(label);
@@ -484,9 +512,6 @@ export class ContentEngine {
 
       const errSpan = document.createElement('div');
       errSpan.className = 'snaptype-form-error';
-      errSpan.style.color = '#e53e3e';
-      errSpan.style.fontSize = '12px';
-      errSpan.style.marginTop = '4px';
       errSpan.style.display = 'none';
       errorContainers[field.name] = errSpan;
       row.appendChild(errSpan);
@@ -670,6 +695,11 @@ export class ContentEngine {
     const panel = document.createElement('div');
     panel.className = 'snaptype-assistant-panel';
 
+    const assistantHead = document.createElement('div');
+    assistantHead.className = 'snaptype-assistant-head';
+    assistantHead.appendChild(createSnaptypeBrand());
+    panel.appendChild(assistantHead);
+
     const searchInput = document.createElement('input');
     searchInput.type = 'text';
     searchInput.className = 'snaptype-assistant-search';
@@ -725,10 +755,6 @@ export class ContentEngine {
       if (filteredList.length > MAX_RENDERED_ITEMS) {
         const moreNotice = document.createElement('div');
         moreNotice.className = 'snaptype-assistant-more';
-        moreNotice.style.padding = '8px 12px';
-        moreNotice.style.fontSize = '11px';
-        moreNotice.style.color = '#888';
-        moreNotice.style.textAlign = 'center';
         moreNotice.textContent = `Showing 25 of ${filteredList.length} snippets. Type to filter...`;
         listContainer.appendChild(moreNotice);
       }

@@ -1,46 +1,83 @@
-/* SnapType Lightweight Content Script Overlays */
+/* In-page overlays — matches apps/web dashboard + ui.css */
 
-.snaptype-overlay {
+.snaptype-overlay,
+.snaptype-assistant-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(16, 17, 16, 0.4);
+  inset: 0;
   z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: #101110;
+  padding: 16px;
+  font-family: var(--font-sans);
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  background-color: rgba(19, 20, 18, 0.38);
+}
+
+.snaptype-assistant-overlay {
+  align-items: flex-start;
+  padding-top: 12vh;
+  background-color: rgba(19, 20, 18, 0.28);
+}
+
+.snaptype-modal,
+.snaptype-assistant-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft), 0 16px 48px rgba(19, 20, 18, 0.12);
+  overflow: hidden;
 }
 
 .snaptype-modal {
-  background: #ffffff;
-  border: 1px solid #e5e8e2;
-  border-radius: 12px;
-  width: 440px;
-  max-width: 90vw;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-  padding: 24px;
+  width: min(480px, 96vw);
+  padding: 20px 22px 22px;
 }
 
-.snaptype-modal-header {
-  font-size: 16px;
-  margin-bottom: 16px;
+.snaptype-assistant-panel {
+  width: min(520px, 96vw);
+}
+
+.snaptype-modal-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.snaptype-modal-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .snaptype-badge {
-  background: #f6f7f4;
-  border: 1px solid #e5e8e2;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-family: monospace;
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 650;
+  background: var(--accent-light);
+  color: var(--accent-deep);
+  border: 1px solid #c0f4b3;
+  border-radius: 8px;
+  padding: 3px 8px;
+  flex: none;
+}
+
+.snaptype-modal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .snaptype-form-row {
@@ -50,25 +87,44 @@
 .snaptype-form-row label {
   display: block;
   font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: #101110;
+  font-weight: 650;
+  margin-bottom: 6px;
+  color: var(--ink);
 }
 
 .snaptype-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 12px;
-  border: 1px solid #e5e8e2;
-  border-radius: 6px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 14px;
   font-size: 14px;
   outline: none;
-  background: #ffffff;
-  color: #101110;
+  background: var(--surface-subtle);
+  color: var(--ink);
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.snaptype-input:hover {
+  background: var(--surface-hover);
 }
 
 .snaptype-input:focus {
-  border-color: #101110;
+  background: var(--surface);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(133, 246, 106, 0.45);
+}
+
+textarea.snaptype-input {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.snaptype-form-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 6px;
 }
 
 .snaptype-modal-actions {
@@ -79,150 +135,334 @@
 }
 
 .snaptype-btn {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 650;
   cursor: pointer;
   border: 1px solid transparent;
+  transition: background-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.snaptype-btn:active {
+  transform: translateY(1px);
 }
 
 .snaptype-btn-primary {
-  background-color: #85f66a;
-  color: #10200d;
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 .snaptype-btn-primary:hover {
-  background-color: #73e958;
+  background: var(--accent-hover);
+  box-shadow: 0 6px 18px rgba(133, 246, 106, 0.45);
 }
 
 .snaptype-btn-secondary {
-  background: #ffffff;
-  border-color: #e5e8e2;
-  color: #101110;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--ink);
 }
 
 .snaptype-btn-secondary:hover {
-  background: #f6f7f4;
+  background: var(--surface-subtle);
 }
 
-/* Assistant Overlay */
-.snaptype-assistant-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2147483647;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 15vh;
-  background-color: rgba(16, 17, 16, 0.2);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.snaptype-assistant-panel {
-  background: #ffffff;
-  border: 1px solid #e5e8e2;
-  border-radius: 10px;
-  width: 480px;
-  max-width: 90vw;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
-  overflow: hidden;
+.snaptype-assistant-head {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .snaptype-assistant-search {
   width: 100%;
   box-sizing: border-box;
-  padding: 14px 18px;
+  margin: 0;
+  padding: 12px 16px;
   font-size: 15px;
   border: none;
-  border-bottom: 1px solid #e5e8e2;
+  border-bottom: 1px solid var(--border);
   outline: none;
-  background: #ffffff;
-  color: #101110;
+  background: var(--surface-subtle);
+  color: var(--ink);
+}
+
+.snaptype-assistant-search:focus {
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--ink);
 }
 
 .snaptype-assistant-list {
-  max-height: 280px;
+  max-height: 300px;
   overflow-y: auto;
+  background: var(--surface);
 }
 
 .snaptype-assistant-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 18px;
+  gap: 10px;
+  padding: 10px 16px;
   cursor: pointer;
-  border-bottom: 1px solid #f6f7f4;
+  border-bottom: 1px solid var(--surface-subtle);
 }
 
 .snaptype-assistant-item:hover,
 .snaptype-assistant-item.selected {
-  background-color: #f6f7f4;
+  background: var(--surface-subtle);
 }
 
 .snaptype-item-title {
   font-size: 14px;
-  font-weight: 600;
-  color: #101110;
+  font-weight: 650;
+  color: var(--ink);
 }
 
 .snaptype-item-shortcut {
-  font-family: monospace;
-  font-size: 12px;
-  background: #eefde9;
-  color: #166534;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--accent-light);
+  color: var(--accent-deep);
   border: 1px solid #c0f4b3;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  flex: none;
 }
 
-.snaptype-empty {
-  padding: 24px;
+.snaptype-empty,
+.snaptype-assistant-more {
+  padding: 20px 16px;
   text-align: center;
-  color: #686b66;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
+.snaptype-native-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
 
-/* ── Modern rounded look + custom controls (in-page form) ── */
-.snaptype-modal { border-radius: 28px !important; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
-.snaptype-input { background: #f1f2f4 !important; border: 1px solid transparent !important; border-radius: 14px !important; padding: 10px 14px !important; }
-.snaptype-input:focus { background: #ffffff !important; border-color: #131412 !important; box-shadow: 0 0 0 3px rgba(133,246,106,.45); }
-.snaptype-btn { border-radius: 999px !important; padding: 9px 18px !important; }
-.snaptype-native-hidden { position: absolute !important; width: 1px !important; height: 1px !important; opacity: 0 !important; pointer-events: none !important; overflow: hidden !important; }
+.snaptype-dd {
+  position: relative;
+}
 
-.snaptype-dd { position: relative; }
-.snaptype-dd-btn { width: 100%; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 42px; padding: 0 14px; font: inherit; font-size: 14px; color: #131412; text-align: left; background: #f1f2f4; border: 1px solid transparent; border-radius: 14px; cursor: pointer; }
-.snaptype-dd-btn:hover { background: #e9ebee; }
-.snaptype-dd-btn:focus-visible, .snaptype-dd-btn[aria-expanded='true'] { outline: none; background: #fff; border-color: #131412; box-shadow: 0 0 0 3px rgba(133,246,106,.45); }
-.snaptype-dd-caret { display: inline-flex; color: #565a63; }
-.snaptype-placeholder { color: #5f636c; }
+.snaptype-dd-btn {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  text-align: left;
+  background: var(--surface-subtle);
+  border: 1px solid transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
 
-.snaptype-dd-list, .snaptype-cal { position: fixed; z-index: 2147483647; margin: 0; padding: 6px; list-style: none; background: #fff; border: 1px solid #e3e5e9; border-radius: 18px; box-shadow: 0 12px 36px rgba(19,20,18,.18); font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #131412; box-sizing: border-box; max-height: 280px; overflow-y: auto; }
-.snaptype-dd-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; font-size: 14px; border-radius: 12px; cursor: pointer; }
-.snaptype-dd-list li.is-active { background: #f1f2f4; }
-.snaptype-dd-list li[aria-selected='true'] { font-weight: 650; }
-.snaptype-dd-list li[aria-selected='true'] svg { color: #1f7a10; }
+.snaptype-dd-btn:hover {
+  background: var(--surface-hover);
+}
 
-.snaptype-sw-row { display: flex; align-items: center; gap: 10px; }
-.snaptype-sw { position: relative; width: 44px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: #c9ccd2; cursor: pointer; transition: background-color .18s; }
-.snaptype-sw.is-on { background: #1f7a10; }
-.snaptype-sw-knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s; }
-.snaptype-sw.is-on .snaptype-sw-knob { transform: translateX(18px); }
-.snaptype-sw:focus-visible { outline: 3px solid #131412; outline-offset: 2px; }
-.snaptype-sw-text { font-size: 14px; color: #565a63; cursor: pointer; }
+.snaptype-dd-btn:focus-visible,
+.snaptype-dd-btn[aria-expanded='true'] {
+  outline: none;
+  background: var(--surface);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(133, 246, 106, 0.45);
+}
 
-.snaptype-cal { width: 260px; padding: 12px; }
-.snaptype-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
-.snaptype-cal-head button, .snaptype-cal-foot button { border: 0; background: transparent; font: inherit; cursor: pointer; color: #131412; border-radius: 999px; padding: 6px 12px; font-size: 14px; }
-.snaptype-cal-head button:hover, .snaptype-cal-foot button:hover { background: #f1f2f4; }
-.snaptype-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
-.snaptype-cal-dow { font-size: 11px; color: #5f636c; padding: 4px 0; }
-.snaptype-cal-day { border: 0; background: transparent; font: inherit; font-size: 13px; height: 32px; border-radius: 50%; cursor: pointer; color: #131412; }
-.snaptype-cal-day:hover { background: #f1f2f4; }
-.snaptype-cal-day.is-today { box-shadow: inset 0 0 0 1px #131412; }
-.snaptype-cal-day.is-selected { background: #85f66a; font-weight: 700; color: #10200d; }
-.snaptype-cal-foot { display: flex; justify-content: space-between; margin-top: 8px; }
+.snaptype-dd-caret {
+  display: inline-flex;
+  color: var(--text-secondary);
+}
+
+.snaptype-placeholder {
+  color: var(--text-muted);
+}
+
+.snaptype-dd-list,
+.snaptype-cal {
+  position: fixed;
+  z-index: 2147483647;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 12px 36px rgba(19, 20, 18, 0.18);
+  font-family: var(--font-sans);
+  color: var(--ink);
+  box-sizing: border-box;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.snaptype-dd-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.snaptype-dd-list li.is-active {
+  background: var(--surface-subtle);
+}
+
+.snaptype-dd-list li[aria-selected='true'] {
+  font-weight: 650;
+}
+
+.snaptype-dd-list li[aria-selected='true'] svg {
+  color: var(--accent-deep);
+}
+
+.snaptype-sw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.snaptype-sw {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  cursor: pointer;
+  transition: background-color 0.18s;
+}
+
+.snaptype-sw.is-on {
+  background: var(--accent-deep);
+}
+
+.snaptype-sw-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s;
+}
+
+.snaptype-sw.is-on .snaptype-sw-knob {
+  transform: translateX(18px);
+}
+
+.snaptype-sw:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.snaptype-sw-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.snaptype-cal {
+  width: 260px;
+  padding: 12px;
+}
+
+.snaptype-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.snaptype-cal-head button,
+.snaptype-cal-foot button {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  color: var(--ink);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.snaptype-cal-head button:hover,
+.snaptype-cal-foot button:hover {
+  background: var(--surface-subtle);
+}
+
+.snaptype-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+
+.snaptype-cal-dow {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.snaptype-cal-day {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.snaptype-cal-day:hover {
+  background: var(--surface-subtle);
+}
+
+.snaptype-cal-day.is-today {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.snaptype-cal-day.is-selected {
+  background: var(--accent);
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
+.snaptype-cal-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snaptype-btn,
+  .snaptype-input,
+  .snaptype-sw,
+  .snaptype-sw-knob {
+    transition: none;
+  }
+}
