@@ -12,7 +12,7 @@ body {
   padding: 0;
   font-family: var(--font-sans);
   letter-spacing: -0.005em;
-  background: var(--background);
+  background: var(--surface);
   color: var(--ink);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -28,21 +28,24 @@ select {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 8px 8px 10px;
-  gap: 8px;
+  padding: 0;
+  gap: 0;
+  background: var(--surface);
 }
 
+/* Flat app bar — same pattern as dashboard site-header-app (no floating card in a square popup). */
 .popup-header {
   flex: none;
-  min-height: 52px;
-  padding: 8px 14px 8px 12px;
+  min-height: 56px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   background: var(--surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-soft);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .logo {
@@ -86,7 +89,8 @@ select {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 4px 4px 0;
+  padding: 0;
+  background: var(--background);
 }
 
 .auth-card {
@@ -94,19 +98,21 @@ select {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 8px 10px 16px;
+  padding: 20px 16px 24px;
 }
 
 .auth-kicker {
   display: inline-block;
   font-size: 12px;
   font-weight: 700;
-  color: var(--ink);
-  background: var(--surface);
-  border-radius: var(--radius-pill);
-  padding: 5px 12px;
-  margin-bottom: 12px;
-  box-shadow: var(--shadow-soft);
+  color: var(--text-secondary);
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 10px;
+  box-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .auth-title {
@@ -226,14 +232,19 @@ select {
   margin-bottom: 10px;
 }
 
+#main-view.view {
+  padding: 12px 14px 0;
+  background: var(--background);
+}
+
 .snippet-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: var(--shadow-soft);
+  box-shadow: none;
 }
 
 .snippet-row {
@@ -274,15 +285,16 @@ select {
 
 .popup-footer {
   flex: none;
-  margin-top: 8px;
-  padding: 8px 10px;
+  margin-top: 0;
+  padding: 10px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
   background: var(--surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-soft);
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .footer-btn {
