@@ -112,10 +112,7 @@ function renderSnippetList(snippets: Snippet[]) {
   snippetList.innerHTML = '';
   if (snippets.length === 0) {
     const emptyDiv = document.createElement('div');
-    emptyDiv.style.padding = '20px';
-    emptyDiv.style.textAlign = 'center';
-    emptyDiv.style.color = '#686b66';
-    emptyDiv.style.fontSize = '12px';
+    emptyDiv.className = 'snippet-empty';
     emptyDiv.textContent = 'No snippets available';
     snippetList.appendChild(emptyDiv);
     return;
@@ -126,10 +123,7 @@ function renderSnippetList(snippets: Snippet[]) {
     row.className = 'snippet-row';
 
     const infoDiv = document.createElement('div');
-    infoDiv.style.display = 'flex';
-    infoDiv.style.flexDirection = 'column';
-    infoDiv.style.flex = '1';
-    infoDiv.style.overflow = 'hidden';
+    infoDiv.className = 'row-meta';
 
     const titleEl = document.createElement('span');
     titleEl.className = 'row-title';
@@ -138,22 +132,16 @@ function renderSnippetList(snippets: Snippet[]) {
     const shortcutEl = document.createElement('span');
     shortcutEl.className = 'row-shortcut';
     shortcutEl.textContent = s.shortcut;
-    shortcutEl.style.alignSelf = 'flex-start';
-    shortcutEl.style.marginTop = '2px';
 
     infoDiv.appendChild(titleEl);
     infoDiv.appendChild(shortcutEl);
 
     const actionDiv = document.createElement('div');
-    actionDiv.style.display = 'flex';
-    actionDiv.style.gap = '4px';
+    actionDiv.className = 'row-actions';
 
-    // Insert Button (Primary Action)
     const insertBtn = document.createElement('button');
-    insertBtn.className = 'popup-btn popup-btn-primary';
-    insertBtn.style.padding = '3px 8px';
-    insertBtn.style.fontSize = '11px';
-    insertBtn.style.margin = '0';
+    insertBtn.type = 'button';
+    insertBtn.className = 'btn-sm btn-sm-primary';
     insertBtn.textContent = 'Insert';
     insertBtn.onclick = (e) => {
       e.stopPropagation();
@@ -193,11 +181,8 @@ function renderSnippetList(snippets: Snippet[]) {
 
     // Copy Button (Secondary Action, ST-017)
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'popup-btn popup-btn-ghost';
-    copyBtn.style.padding = '3px 8px';
-    copyBtn.style.fontSize = '11px';
-    copyBtn.style.margin = '0';
-    copyBtn.style.border = '1px solid var(--border)';
+    copyBtn.type = 'button';
+    copyBtn.className = 'btn-sm btn-sm-secondary';
     copyBtn.textContent = 'Copy';
     copyBtn.onclick = async (e) => {
       e.stopPropagation();

@@ -45,19 +45,19 @@
     </div>
 
     <!-- State B: Authenticated View -->
-    <div id="main-view" class="view" style="display: none;">
-      <!-- Workspace Selector -->
-      <div class="workspace-bar">
-        <label for="workspace-select" class="workspace-label">Workspace</label>
-        <select id="workspace-select" class="popup-select"></select>
+    <div id="main-view" class="view view-main" style="display: none;">
+      <div class="popup-main-toolbar">
+        <div class="popup-toolbar-row">
+          <div class="workspace-bar">
+            <label for="workspace-select" class="sr-only">Workspace</label>
+            <select id="workspace-select" class="popup-select" aria-label="Workspace"></select>
+          </div>
+          <div class="search-box">
+            <input type="text" id="snippet-search" class="popup-input popup-input-search" placeholder="Search…" aria-label="Search snippets" />
+          </div>
+        </div>
       </div>
 
-      <!-- Search -->
-      <div class="search-box">
-        <input type="text" id="snippet-search" class="popup-input" placeholder="Search snippets... (Ctrl+K)" />
-      </div>
-
-      <!-- Snippet List -->
       <div id="snippet-list" class="snippet-list">
         <!-- Rendered dynamically -->
       </div>
